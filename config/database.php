@@ -61,7 +61,25 @@ return [
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
         ],
-
+        'inventory' => [
+            'driver' => 'mysql',
+            'url' => env('IDB_URL'),
+            'host' => env('IDB_HOST', '127.0.0.1'),
+            'port' => env('IDB_PORT', '3306'),
+            'database' => env('IDB_DATABASE', 'laravel'),
+            'username' => env('IDB_USERNAME', 'root'),
+            'password' => env('IDB_PASSWORD', ''),
+            'unix_socket' => env('IDB_SOCKET', ''),
+            'charset' => env('IDB_CHARSET', 'utf8mb4'),
+            'collation' => env('IDB_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ],
         'masterlist' => [
             'driver' => 'mysql',
             'url' => env('ADB_URL'),
