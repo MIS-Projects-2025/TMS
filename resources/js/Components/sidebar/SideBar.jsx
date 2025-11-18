@@ -1,24 +1,32 @@
 import { Link, usePage, router } from "@inertiajs/react";
-import { useState, useEffect } from "react";
+import { useState, useContext } from "react";
 import Navigation from "@/Components/sidebar/Navigation";
 import ThemeToggler from "@/Components/sidebar/ThemeToggler";
+import { ThemeContext } from "../ThemeContext";
+// import NotificationBell from "@/Components/NotificationBell";
+import {
+    Menu,
+    X,
+    PanelLeftClose,
+    PanelLeftOpen,
+    LogOut,
+    User,
+} from "lucide-react";
 
 export default function Sidebar() {
-    const { display_name } = usePage().props;
-    const [theme, setTheme] = useState("light");
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false); // for responsiveness
+    const { display_name, emp_data } = usePage().props;
+    const { theme, toggleTheme } = useContext(ThemeContext);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(true); // desktop toggle
+    const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false); // mobile toggle
 
-    useEffect(() => {
-        const storedTheme = localStorage.getItem("theme") || "light";
-        setTheme(storedTheme);
-        document.documentElement.setAttribute("data-theme", storedTheme);
-    }, []);
-
-    const toggleTheme = () => {
-        const newTheme = theme === "light" ? "dark" : "light";
-        setTheme(newTheme);
-        document.documentElement.setAttribute("data-theme", newTheme);
-        localStorage.setItem("theme", newTheme);
+    // Logout function
+    const logout = () => {
+        const token = localStorage.getItem("authify-token");
+        localStorage.removeItem("authify-token");
+        router.get(route("logout"));
+        window.location.href = `http://192.168.2.221/authify/public/logout?key=${encodeURIComponent(
+            token
+        )}&redirect=${encodeURIComponent(route("dashboard"))}`;
     };
 
     const formattedAppName = display_name
@@ -30,47 +38,64 @@ export default function Sidebar() {
         <div className="flex">
             {/* Mobile Hamburger */}
             <button
-                className="absolute z-50 p-2 rounded top-4 right-4 md:hidden"
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="absolute z-[60] p-2 rounded top-4 left-4 md:hidden"
+                onClick={() => setIsMobileSidebarOpen(true)}
             >
-                <svg
-                    className="w-6 h-6"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                >
-                    <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M4 6h16M4 12h16M4 18h16"
-                    />
-                </svg>
+                <Menu className="w-6 h-6" />
             </button>
+
+            {/* Overlay (mobile only) */}
+            {isMobileSidebarOpen && (
+                <div
+                    className="fixed inset-0 z-40 bg-black bg-opacity-50 md:hidden"
+                    onClick={() => setIsMobileSidebarOpen(false)}
+                />
+            )}
 
             {/* Sidebar */}
             <div
                 className={`
-                    fixed md:relative top-0 left-0 z-40 transition-transform transform
-                    ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}
-                    md:translate-x-0
-                    md:flex
-                    flex-col min-h-screen w-[270px] space-y-6 px-4 pb-6 pt-4
-                    ${
-                        theme === "light"
-                            ? "bg-gray-50 text-black"
-                            : "bg-base-100 text-base-content"
-                    }
-                `}
-                style={{
-                    scrollbarWidth: "none",
-                    msOverflowStyle: "none",
-                }}
+        fixed md:relative top-0 left-0 z-50 transition-all duration-300
+        ${
+            isMobileSidebarOpen
+                ? "translate-x-0"
+                : "md:translate-x-0 -translate-x-full md:!translate-x-0"
+        }
+        flex flex-col min-h-screen
+        ${isSidebarOpen ? "w-[240px]" : "w-[80px]"}
+        px-4 pb-6 pt-4
+        bg-gray-900 text-white
+    `}
             >
+                {/* Desktop Collapse Button */}
+                <button
+                    className="hidden md:flex items-center justify-center absolute top-4 right-[-18px] 
+                       btn btn-sm btn-circle shadow-md 
+                       bg-base-200 hover:bg-base-300 
+                       transition"
+                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                >
+                    {isSidebarOpen ? (
+                        <PanelLeftClose className="w-4 h-4" />
+                    ) : (
+                        <PanelLeftOpen className="w-4 h-4" />
+                    )}
+                </button>
+
+                {/* Close button on mobile */}
+                <button
+                    className="absolute top-4 right-4 md:hidden"
+                    onClick={() => setIsMobileSidebarOpen(false)}
+                >
+                    <X className="w-6 h-6" />
+                </button>
+
                 {/* LOGO */}
                 <Link
                     href={route("dashboard")}
-                    className="flex items-center pl-[10px] text-lg font-bold"
+                    className={`flex items-center ${
+                        isSidebarOpen ? "pl-[10px]" : "justify-center"
+                    } text-lg font-bold`}
                 >
                     <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -78,20 +103,65 @@ export default function Sidebar() {
                         viewBox="0 0 24 24"
                         strokeWidth="1.5"
                         stroke="currentColor"
-                        className="w-5 h-5"
+                        className="w-6 h-6"
                     >
                         <path
                             strokeLinecap="round"
                             strokeLinejoin="round"
-                            d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z"
+                            d="M9 3H7.5A2.25 2.25 0 0 0 5.25 5.25V7A2.25 2.25 0 0 1 3 9.25v1.5A2.25 2.25 0 0 1 5.25 13V14.75A2.25 2.25 0 0 0 7.5 17h1.5M15 3h1.5A2.25 2.25 0 0 1 18.75 5.25V7A2.25 2.25 0 0 0 21 9.25v1.5A2.25 2.25 0 0 0 18.75 13V14.75A2.25 2.25 0 0 1 16.5 17H15"
+                        />
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M9 3h6v18H9z"
                         />
                     </svg>
-                    <p className="pt-[2px] pl-1">{formattedAppName}</p>
+                    {isSidebarOpen && (
+                        <p className="pt-[2px] pl-1">{formattedAppName}</p>
+                    )}
                 </Link>
 
-                <Navigation />
+                <br />
 
-                <ThemeToggler toggleTheme={toggleTheme} theme={theme} />
+                {/* Navigation */}
+                <Navigation isSidebarOpen={isSidebarOpen} />
+
+                {/* Mobile-only (Notification + Profile + Logout) */}
+                {isMobileSidebarOpen && (
+                    <div className="mt-6 border-t border-base-300 pt-4 md:hidden">
+                        <div className="flex items-center mb-3 space-x-2">
+                            {/* <NotificationBell /> */}
+                            <span className="font-medium">
+                                Hello, {emp_data?.emp_firstname}
+                            </span>
+                        </div>
+                        <div className="flex flex-col space-y-2">
+                            <Link
+                                href={route("profile.index")}
+                                className="flex items-center space-x-2 hover:bg-base-200 p-2 rounded-lg transition"
+                            >
+                                <User className="w-5 h-5" />
+                                <span>Profile</span>
+                            </Link>
+                            <button
+                                onClick={logout}
+                                className="flex items-center space-x-2 hover:bg-base-200 p-2 rounded-lg transition"
+                            >
+                                <LogOut className="w-5 h-5" />
+                                <span>Logout</span>
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Theme toggler */}
+                <div
+                    className={`${
+                        isSidebarOpen ? "block" : "hidden"
+                    } md:block mt-auto`}
+                >
+                    <ThemeToggler toggleTheme={toggleTheme} theme={theme} />
+                </div>
             </div>
         </div>
     );
