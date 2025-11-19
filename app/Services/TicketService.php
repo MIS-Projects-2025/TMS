@@ -43,4 +43,9 @@ class TicketService
             ]
         ];
     }
+
+    public function createTicket(array $ticketData, array $employeeData): array
+    {
+        return $this->ticketRepository->createTicket($ticketData, $employeeData);
+    }
 }

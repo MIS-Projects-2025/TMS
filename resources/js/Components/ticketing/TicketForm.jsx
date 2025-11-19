@@ -1,5 +1,5 @@
 import React from "react";
-import { Form, Input, Select } from "antd";
+import { Button, Form, Input, Select } from "antd";
 import { TicketIcon } from "lucide-react";
 
 const { Option } = Select;
@@ -94,7 +94,7 @@ const TicketForm = ({
                 )}
             </div>
 
-            {/* Item Name Select (for options that have data) */}
+            {/* Item Name Select (sa mga option na may kaugnay na data) */}
             {showItemSelect && (
                 <Form.Item
                     label={
@@ -120,7 +120,7 @@ const TicketForm = ({
                         size="large"
                     >
                         {itemOptions.map((item) => (
-                            <Option key={item.id} value={item.id}>
+                            <Option key={item.id} value={item.name}>
                                 {item.name}
                             </Option>
                         ))}
@@ -178,7 +178,7 @@ const TicketForm = ({
             {/* Submit Button */}
             {selectedOption && (
                 <Form.Item>
-                    <button type="submit" className="btn btn-primary w-full">
+                    <button type="submit" className="btn btn-success w-full">
                         <TicketIcon className="inline mr-2" />
                         Generate Ticket
                     </button>

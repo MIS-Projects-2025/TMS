@@ -1,5 +1,5 @@
 import React, { use, useState, useEffect } from "react";
-import { Form } from "antd";
+import { Form, message } from "antd";
 import { usePage } from "@inertiajs/react";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import { useTicketForm } from "@/Hooks/useTicketForm";
@@ -21,9 +21,25 @@ const Create = () => {
         getItemLabel,
     } = useTicketForm();
 
-    const onFinish = (values) => {
+    const onFinish = async (values) => {
         console.log("Form values:", values);
-        // Handle form submission here
+
+        try {
+            const response = await axios.post(route("tickets.store"), values);
+
+            if (response.data.success) {
+                message.success(
+                    `Ticket created successfully! Ticket ID: ${response.data.ticket_id}`
+                );
+
+                form.resetFields();
+            } else {
+                message.error(response.data.message);
+            }
+        } catch (error) {
+            message.error("Failed to create ticket. Please try again.");
+            console.error("Ticket creation error:", error);
+        }
     };
 
     return (

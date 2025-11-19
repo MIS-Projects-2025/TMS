@@ -15,7 +15,7 @@ export const useTicketForm = () => {
     const [selectedItem, setSelectedItem] = useState("");
     const [hasDataOptions, setHasDataOptions] = useState({});
 
-    // Extract has_data information from request_types
+    // Kunin ang value ng has_data mula sa request_types
     useEffect(() => {
         const hasDataMap = {};
         if (request_types) {
@@ -28,7 +28,7 @@ export const useTicketForm = () => {
         setHasDataOptions(hasDataMap);
     }, [request_types]);
 
-    // Helper function to determine if an option has associated data
+    // Function para malaman kung ang isang option ay may kaugnay na data
     const determineIfHasData = (category, option) => {
         if (category === "Hardware" && hardware_options[option]) return true;
         if (category === "Printer" && printer_options[option]) return true;
@@ -36,7 +36,7 @@ export const useTicketForm = () => {
         return false;
     };
 
-    // Unified change handler
+    // Dynamic na handleChange function
     const handleChange = (field, value) => {
         switch (field) {
             case "type":
@@ -56,7 +56,7 @@ export const useTicketForm = () => {
         }
     };
 
-    // Determine which options to show based on selected type and option
+    // Kunin ang mga item options base sa selected type at option
     const getItemOptions = () => {
         if (selectedType === "Network") return null;
 
@@ -76,7 +76,7 @@ export const useTicketForm = () => {
     const itemOptions = getItemOptions();
     const showItemSelect = itemOptions && itemOptions.length > 0;
 
-    // Determine label based on type and option
+    // Alamin ang label base sa type at option
     const getItemLabel = () => {
         if (selectedType === "Hardware") return `${selectedOption} Name`;
         if (selectedType === "Printer") return "Printer Name";
@@ -84,7 +84,7 @@ export const useTicketForm = () => {
         return "Item Name";
     };
 
-    // Check if we should show custom input
+    // Tiga check kung kailangan ipakita ang custom input field
     const showCustomInput =
         (showItemSelect && selectedItem === "Others") ||
         (!showItemSelect && selectedOption && selectedOption !== "");
