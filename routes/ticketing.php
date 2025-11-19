@@ -14,4 +14,9 @@ Route::prefix($app_name)
         // Ticket Routes
         Route::get('/tickets', [TicketingController::class, 'showTicketForm'])->name('tickets');
         Route::post('/tickets', [TicketingController::class, 'storeTicket'])->name('tickets.store');
+        Route::get('/tickets/datatable', [TicketingController::class, 'getTicketsDataTable'])->name('tickets.datatable');
+
+
+        //action
+        Route::post('/tickets/action', [TicketingController::class, 'ticketAction'])->name('tickets.action');
     });

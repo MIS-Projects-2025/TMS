@@ -3,7 +3,8 @@ import axios from "axios";
 
 import SidebarLink from "@/Components/sidebar/SidebarLink";
 import { usePage } from "@inertiajs/react";
-import { LayoutDashboard, TicketCheckIcon } from "lucide-react";
+import { LayoutDashboard, TableIcon, TicketCheckIcon } from "lucide-react";
+import { Table } from "antd";
 
 export default function NavLinks({ isSidebarOpen }) {
     const { emp_data } = usePage().props;
@@ -23,6 +24,12 @@ export default function NavLinks({ isSidebarOpen }) {
                 href={route("tickets")}
                 label="Generate Ticket"
                 icon={<TicketCheckIcon className="w-5 h-5" />}
+                isSidebarOpen={isSidebarOpen}
+            />
+            <SidebarLink
+                href={route("tickets.datatable")}
+                label="Tickets Table"
+                icon={<TableIcon className="w-5 h-5" />}
                 isSidebarOpen={isSidebarOpen}
             />
         </nav>
