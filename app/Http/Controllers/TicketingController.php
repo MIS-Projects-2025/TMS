@@ -33,6 +33,7 @@ class TicketingController extends Controller
      */
     public function storeTicket(Request $request)
     {
+
         $request->validate([
             'request_type' => 'required|string',
             'request_option' => 'required|string',
@@ -87,7 +88,7 @@ class TicketingController extends Controller
             'search' => trim($request->input('search', '')),
             'sortField' => $request->input('sortField', 'created_at'),
             'sortOrder' => $request->input('sortOrder', 'desc'),
-            'status' => $request->input('status', 'all'),
+            'status' => $request->input('status', 'open'),
             'project' => $request->input('project', ''),
         ];
 
@@ -100,20 +101,61 @@ class TicketingController extends Controller
             'filters' => $result['filters'],
         ])->with('flash', ['message' => 'Tickets loaded successfully']);
     }
+    public function getTicketDetails(Request $request, string $ticketId)
+    {
+        $empData = session('emp_data');
+        if (!$empData) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized'
+            ], 401);
+        }
+
+        $userRoles = $this->userRoleService->getUserAccountType($empData);
+
+        try {
+            $ticketDetails = $this->ticketService->getTicketDetails($ticketId, $empData, $userRoles);
+
+            if (!$ticketDetails) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ticket not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $ticketDetails
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch ticket details: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 
     public function ticketAction(Request $request)
     {
-        $request->validate([
-            'ticket_id' => 'required|string',
-            'action' => 'required|string|in:RESOLVE,CLOSE,Resolve,Close,RETURN,Return',
-        ]);
-
+        // dd($request->all());
         $empData = session('emp_data');
         $ticketId = $request->input('ticket_id');
+        $remarks = $request->input('remarks');
+        $rating = $request->input('rating');
         $actionType = strtoupper($request->input('action'));
+        $request->merge([
+            'action' => $actionType
+        ]);
+
+        $request->validate([
+            'ticket_id' => 'required|string',
+            'action' => 'required|string|in:RESOLVE,CLOSE,RETURN,ONGOING,CANCEL',
+            'remarks' => 'nullable|string',
+            'rating' => 'nullable|integer|min:1|max:5',
+        ]);
 
         try {
-            $success = $this->ticketService->ticketAction($ticketId, $empData['emp_id'], $actionType);
+            $success = $this->ticketService->ticketAction($ticketId, $empData['emp_id'], $actionType, $remarks, $rating);
 
             if ($success) {
                 return response()->json([

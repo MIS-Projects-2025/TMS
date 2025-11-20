@@ -23,8 +23,6 @@ const DurationCell = ({ record }) => {
         return () => clearInterval(interval);
     }, [record.CREATED_AT, record.STATUS]);
 
-    if (Number(record.STATUS) !== 1) return "-";
-
     const hours = Math.floor(secondsOpen / 3600);
     const minutes = Math.floor((secondsOpen % 3600) / 60);
     const seconds = secondsOpen % 60;

@@ -43,17 +43,57 @@ const TicketingTable = () => {
     });
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [selectedTicket, setSelectedTicket] = useState(null);
-    const handleTicketAction = async (ticketId, action) => {
-        console.log(action);
+    const [ticketHistory, setTicketHistory] = useState([]);
+    const [remarksHistory, setRemarksHistory] = useState([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
 
+    const ticketAndRemarksHistory = async (ticketId) => {
+        setLoadingHistory(true);
+        try {
+            const { data } = await axios.get(
+                route("tickets.details", { ticketId })
+            );
+            console.log(data);
+
+            const { success, message: msg, data: ticketData } = data;
+
+            if (!success) {
+                message.error(msg);
+                setTicketHistory([]);
+                setRemarksHistory([]);
+                return;
+            }
+
+            const { history, remarks } = ticketData;
+            setTicketHistory(history);
+            setRemarksHistory(remarks);
+            console.log(ticketData);
+        } catch (err) {
+            console.error(err.response || err);
+            message.error("Failed to fetch ticket history.");
+            setTicketHistory([]);
+            setRemarksHistory([]);
+        } finally {
+            setLoadingHistory(false);
+        }
+    };
+
+    const handleTicketAction = async (ticketId, action, remarks, rating) => {
+        console.log(action);
+        if (!remarks) {
+            message.error("Please enter remarks.");
+        }
         try {
             const res = await axios.post(route("tickets.action"), {
                 ticket_id: ticketId,
                 action,
+                remarks,
+                rating,
             });
             if (res.data.success) {
                 message.success(res.data.message);
                 setIsDrawerOpen(false);
+                window.location.reload();
                 // optionally refresh table
             } else {
                 message.error(res.data.message);
@@ -114,38 +154,25 @@ const TicketingTable = () => {
             key: "STATUS",
             width: 120,
             sorter: true,
-            render: (status, record) => {
-                const isCritical = isTicketCritical(record);
-
-                const colorMap = {
-                    1: isCritical ? "red" : "blue",
-                    2: "green",
-                    3: "gray",
-                    4: "orange",
-                };
-
-                const labelMap = {
-                    1: isCritical ? "Critical" : "Open",
-                    2: "Resolved",
-                    3: "Closed",
-                    4: "Returned",
-                };
-
+            render: (_, record) => {
                 const tag = (
-                    <Tag color={colorMap[status] || "default"}>
-                        {labelMap[status] || "-"}
+                    <Tag color={record.status_color || "default"}>
+                        {record.status_label || "-"}
                     </Tag>
                 );
 
-                return isCritical ? (
-                    <Tooltip
-                        title={`Open for more than 30 minutes - created at ${record.CREATED_AT}`}
-                    >
-                        {tag}
-                    </Tooltip>
-                ) : (
-                    tag
-                );
+                // Optional tooltip for critical tickets
+                if (record.STATUS === 1 && isTicketCritical(record)) {
+                    return (
+                        <Tooltip
+                            title={`Open for more than 30 minutes - created at ${record.CREATED_AT}`}
+                        >
+                            {tag}
+                        </Tooltip>
+                    );
+                }
+
+                return tag;
             },
         },
         {
@@ -190,14 +217,14 @@ const TicketingTable = () => {
                         <StatCard
                             title="All Tickets"
                             value={statusCounts?.all || 0}
-                            color="primary"
+                            color="neutral"
                             icon={AppstoreOutlined}
                             onClick={() => handleStatusFilter("all")}
                             isActive={activeFilter === "all"}
                             filterType="all"
                         />
                         <StatCard
-                            title="Open"
+                            title="Open / Ongoing"
                             value={statusCounts?.open || 0}
                             color="info"
                             icon={ClockCircleOutlined}
@@ -208,7 +235,7 @@ const TicketingTable = () => {
                         <StatCard
                             title="Critical"
                             value={statusCounts?.critical || 0}
-                            color="error"
+                            color="secondary"
                             icon={ExclamationCircleOutlined}
                             onClick={() => handleStatusFilter("critical")}
                             isActive={activeFilter === "critical"}
@@ -225,9 +252,9 @@ const TicketingTable = () => {
                             filterType="resolved"
                         />
                         <StatCard
-                            title="Returned"
+                            title="Returned / Cancelled"
                             value={statusCounts?.returned || 0}
-                            color="neutral"
+                            color="error"
                             icon={RollbackOutlined}
                             onClick={() => handleStatusFilter("returned")}
                             isActive={activeFilter === "returned"}
@@ -295,8 +322,11 @@ const TicketingTable = () => {
                                         onClick: () => {
                                             setSelectedTicket(record);
                                             setIsDrawerOpen(true);
+                                            ticketAndRemarksHistory(
+                                                record.TICKET_ID
+                                            ); // async fetch
                                         },
-                                        style: { cursor: "pointer" }, // show pointer to indicate clickable
+                                        style: { cursor: "pointer" },
                                     })}
                                 />
                             ) : (
@@ -314,6 +344,9 @@ const TicketingTable = () => {
                 onClose={() => setIsDrawerOpen(false)}
                 handleButtonClick={handleTicketAction}
                 action={selectedTicket?.action}
+                ticketHistory={ticketHistory}
+                remarksHistory={remarksHistory}
+                loadingHistory={loadingHistory}
             />
         </AuthenticatedLayout>
     );

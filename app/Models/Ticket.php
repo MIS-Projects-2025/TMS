@@ -23,13 +23,18 @@ class Ticket extends Model
         'type_of_request',
         'details',
         'status',
+        'rating',
         'item_id',
         'item_name',
-        'request_option'
+        'request_option',
+        'handled_by',
+        'handled_at',
+        'closed_by',
+        'closed_at'
     ];
 
     protected $casts = [
-        'created_at' => 'datetime',
+
         'handled_at' => 'datetime',
         'closed_at' => 'datetime',
         'deleted_at' => 'datetime',
@@ -71,5 +76,53 @@ class Ticket extends Model
     public function setHandledAtAttribute($value)
     {
         $this->attributes['HANDLED_AT'] = $value;
+    }
+
+    public function getCreatedAtAttribute($value)
+    {
+        return isset($this->attributes['CREATED_AT'])
+            ? \Carbon\Carbon::parse($this->attributes['CREATED_AT'])
+            : null;
+    }
+
+
+    public function setCreatedAtAttribute($value)
+    {
+        $this->attributes['CREATED_AT'] = $value;
+    }
+
+    public function getRatingAttribute()
+    {
+        return $this->attributes['RATING'] ?? null;
+    }
+
+
+    public function setRatingAttribute($value)
+    {
+        $this->attributes['RATING'] = $value;
+    }
+
+    public function employee()
+    {
+        return $this->belongsTo(Masterlist::class, 'HANDLED_BY', 'EMPLOYID');
+    }
+    public function handler()
+    {
+        return $this->belongsTo(Masterlist::class, 'HANDLED_BY', 'EMPLOYID')
+            ->select(['EMPLOYID', 'EMPNAME']);
+    }
+    public function closer()
+    {
+        return $this->belongsTo(Masterlist::class, 'CLOSED_BY', 'EMPLOYID')
+            ->select(['EMPLOYID', 'EMPNAME']);
+    }
+    public function setClosedByAttribute($value)
+    {
+        $this->attributes['CLOSED_BY'] = $value;
+    }
+
+    public function setClosedAtAttribute($value)
+    {
+        $this->attributes['CLOSED_AT'] = $value;
     }
 }

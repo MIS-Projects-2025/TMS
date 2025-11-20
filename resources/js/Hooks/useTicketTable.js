@@ -20,17 +20,17 @@ export default function useTicketingTable(initialProps) {
     const statusMap = {
         all: "all",
         open: "open",
-        resolved: 2,
-        closed: 3,
-        returned: 4,
+        resolved: 3,
+        closed: 4,
+        returned: "returned",
         critical: "critical",
     };
 
     const reverseStatusMap = {
         open: "open",
-        2: "resolved",
-        3: "closed",
-        4: "returned",
+        3: "resolved",
+        4: "closed",
+        returned: "returned",
         critical: "critical",
     };
 

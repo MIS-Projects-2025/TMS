@@ -84,4 +84,9 @@ class TicketLogs extends Model
     {
         $this->attributes['METADATA'] = $value;
     }
+    public function actor()
+    {
+        return $this->belongsTo(Masterlist::class, 'ACTION_BY', 'EMPLOYID')
+            ->select(['EMPLOYID', 'EMPNAME']);
+    }
 }

@@ -19,4 +19,7 @@ Route::prefix($app_name)
 
         //action
         Route::post('/tickets/action', [TicketingController::class, 'ticketAction'])->name('tickets.action');
+
+        Route::get('/tickets/{ticketId}/details', [TicketingController::class, 'getTicketDetails'])
+            ->name('tickets.details');
     });

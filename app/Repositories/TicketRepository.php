@@ -7,6 +7,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use App\Models\Ticket;
 use App\Models\TicketLogs;
+use App\Models\TicketRemarksHistory;
 use Carbon\Carbon;
 
 class TicketRepository
@@ -109,7 +110,17 @@ class TicketRepository
     {
         return TicketLogs::create($logData);
     }
+    public function getRemarksHistoryPaginated(string $ticketId, int $perPage = 10): LengthAwarePaginator
+    {
+        return TicketRemarksHistory::where('ticket_id', $ticketId)
+            ->orderBy('created_at', 'desc')
+            ->paginate($perPage);
+    }
 
+    public function createRemarksHistory(array $remarksData): TicketRemarksHistory
+    {
+        return TicketRemarksHistory::create($remarksData);
+    }
     public function findTicketById(string $ticketId): ?Ticket
     {
         return Ticket::where('ticket_id', $ticketId)->first();
@@ -137,7 +148,7 @@ class TicketRepository
         array $whereConditions = [],
         array $whereInConditions = []
     ): LengthAwarePaginator {
-        $query = Ticket::query();
+        $query = Ticket::with('handler', 'closer');
 
         // Apply search filter
         if (!empty($filters['search'])) {
@@ -158,9 +169,17 @@ class TicketRepository
                 $query->where('status', 1)->where('created_at', '<=', $criticalTime);
             } elseif ($filters['status'] === 'open') {
                 $criticalTime = Carbon::now()->subMinutes(30);
-                $query->where('status', 1)->where('created_at', '>', $criticalTime);
-            } elseif (in_array($filters['status'], ['resolved', 'closed', 'returned'])) {
-                $statusMap = ['resolved' => 2, 'closed' => 3, 'returned' => 4];
+                $query->where(function ($q) use ($criticalTime) {
+                    $q->where(function ($q2) use ($criticalTime) {
+                        $q2->where('status', 1)
+                            ->where('created_at', '>', $criticalTime);
+                    })
+                        ->orWhere('status', 2); // Ongoing, all dates
+                });
+            } elseif (($filters['status'] === 'returned')) {
+                $query->whereIn('status', [5, 6]);
+            } elseif (in_array($filters['status'], ['resolved', 'closed'])) {
+                $statusMap = ['resolved' => 3, 'closed' => 4,];
                 $query->where('status', $statusMap[$filters['status']]);
             } elseif (is_numeric($filters['status'])) {
                 $query->where('status', $filters['status']);
@@ -218,11 +237,18 @@ class TicketRepository
 
         return [
             'all' => $baseQuery->count(),
-            'open' => $openQuery->where('status', 1)->where('created_at', '>', $criticalTime)->count(),
+            'open' => $openQuery->where(function ($q) use ($criticalTime) {
+                $q->where(function ($q2) use ($criticalTime) {
+                    $q2->where('status', 1)
+                        ->where('created_at', '>', $criticalTime);
+                })
+                    ->orWhere('status', 2);
+            })->count(),
+
             'critical' => $criticalQuery->where('status', 1)->where('created_at', '<=', $criticalTime)->count(),
-            'resolved' => $baseQuery->clone()->where('status', 2)->count(),
-            'closed' => $baseQuery->clone()->where('status', 3)->count(),
-            'returned' => $baseQuery->clone()->where('status', 4)->count(),
+            'resolved' => $baseQuery->clone()->where('status', 3)->count(),
+            'closed' => $baseQuery->clone()->where('status', 4)->count(),
+            'returned' => $baseQuery->clone()->whereIn('status', [5, 6])->count(),
         ];
     }
 
@@ -274,11 +300,65 @@ class TicketRepository
 
         return [
             'all' => $baseQuery->count(),
-            'open' => $openQuery->where('status', 1)->where('created_at', '>', $criticalTime)->count(),
+            'open' => $openQuery->where(function ($q) use ($criticalTime) {
+                $q->where(function ($q2) use ($criticalTime) {
+                    $q2->where('status', 1)
+                        ->where('created_at', '>', $criticalTime);
+                })
+                    ->orWhere('status', 2);
+            })->count(),
             'critical' => $criticalQuery->where('status', 1)->where('created_at', '<=', $criticalTime)->count(),
-            'resolved' => $baseQuery->clone()->where('status', 2)->count(),
-            'closed' => $baseQuery->clone()->where('status', 3)->count(),
-            'returned' => $baseQuery->clone()->where('status', 4)->count(),
+            'resolved' => $baseQuery->clone()->where('status', 3)->count(),
+            'closed' => $baseQuery->clone()->where('status', 4)->count(),
+            'returned' => $baseQuery->clone()->whereIn('status', [5, 6])->count(),
+        ];
+    }
+
+    /**
+     * Get ticket logs (activity history) for a specific ticket
+     */
+    public function getTicketLogs(string $ticketId): Collection
+    {
+        $logs = TicketLogs::with('actor')
+            ->where('ticket_id', $ticketId)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Map to include action_by name
+        return $logs->map(function ($log) {
+            return [
+                'ID'          => $log->ID,
+                'TICKET_ID'   => $log->TICKET_ID,
+                'ACTION_TYPE' => $log->ACTION_TYPE,
+                'ACTION_BY'   => $log->actor->EMPNAME ?? 'N/A', // map name
+                'ACTION_AT'   => $log->ACTION_AT,
+                'REMARKS'     => $log->REMARKS,
+                'METADATA'    => $log->METADATA,
+                'CREATED_AT'  => $log->CREATED_AT,
+                'UPDATED_AT'  => $log->UPDATED_AT,
+            ];
+        });
+    }
+
+
+    /**
+     * Get ticket remarks history for a specific ticket
+     */
+    public function getRemarksHistory(string $ticketId): Collection
+    {
+        return TicketRemarksHistory::where('ticket_id', $ticketId)
+            ->orderBy('created_at', 'desc')
+            ->get();
+    }
+
+    /**
+     * Get complete ticket history (logs + remarks combined)
+     */
+    public function getTicketHistory(string $ticketId): array
+    {
+        return [
+            'logs' => $this->getTicketLogs($ticketId),
+            'remarks' => $this->getRemarksHistory($ticketId),
         ];
     }
 }

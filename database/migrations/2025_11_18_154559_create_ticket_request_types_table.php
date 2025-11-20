@@ -19,6 +19,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('ticket_request_types');
+        Schema::connection('tms')->dropIfExists('ticket_request_types');
     }
 };

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Repositories\TicketRepository;
 use App\Repositories\TicketRequestTypeRepository;
 use Illuminate\Support\Facades\DB;
+use App\Services\TicketStatusService;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 class TicketService
@@ -59,7 +60,7 @@ class TicketService
             'station' => $employeeData['emp_station'],
             'type_of_request' => $ticketData['request_type'],
             'request_option' => $ticketData['request_option'],
-            'item_name' => $ticketData['item_name'],
+            'item_name' => $ticketData['item_name'] ?? null,
             'details' => $ticketData['details'],
             'status' => 1, // Business rule: new tickets are open
             'created_at' => now(),
@@ -99,12 +100,22 @@ class TicketService
         $tickets = $this->ticketRepository->getTicketsWithFilters($filters, $whereConditions);
         $statusCounts = $this->ticketRepository->getStatusCounts($whereConditions);
 
-        // Business logic: Determine available actions for each ticket
         $ticketsData = $tickets->getCollection()->map(function ($ticket) use ($employeeData, $userRoles) {
             $status = $ticket->STATUS ?? $ticket->status;
             $ticket->action = $this->determineTicketAction($ticket, $status, $employeeData, $userRoles);
+            $ticket->status_label = TicketStatusService::getStatusLabel($ticket);
+            $ticket->status_color = TicketStatusService::getStatusColor($ticket);
+
+            // map handled_by_name
+            $ticket->handled_by_name = $ticket->handler->EMPNAME ?? 'N/A';
+            $ticket->closed_by_name   = $ticket->closer->EMPNAME ?? 'N/A';
+
+            // remove full object
+            unset($ticket->handler);
+
             return $ticket;
         });
+
 
         return [
             'tickets' => $ticketsData->toArray(),
@@ -119,42 +130,74 @@ class TicketService
         ];
     }
 
-    public function ticketAction(string $ticketId, string $userId, string $actionType = 'RESOLVE'): bool
+    public function ticketAction(string $ticketId, string $userId, string $actionType = 'RESOLVE', string $remarks = '', ?int $rating = null): bool
     {
-        // Business validation
-        if (!in_array(strtoupper($actionType), ['RESOLVE', 'CLOSE', 'RETURN'])) {
+        $actionType = strtoupper($actionType);
+
+        if (!in_array($actionType, ['RESOLVE', 'CLOSE', 'RETURN', 'ONGOING', 'CANCEL'])) {
             throw new \InvalidArgumentException('Invalid action type');
         }
 
-        return DB::transaction(function () use ($ticketId, $userId, $actionType) {
-            // Find ticket
+        return DB::transaction(function () use ($ticketId, $userId, $actionType, $remarks, $rating) {
             $ticket = $this->ticketRepository->findTicketById($ticketId);
             if (!$ticket) {
                 return false;
             }
 
-            // Business logic: Determine new status
-            $statusMap = ['RESOLVE' => 2, 'CLOSE' => 3, 'RETURN'  => 4,];
-            $newStatus = $statusMap[strtoupper($actionType)];
+            $oldStatus = $ticket->status;
 
-            // Business logic: Update ticket
+            $statusMap = [
+                'ONGOING' => 2,
+                'RESOLVE' => 3,
+                'CLOSE' => 4,
+                'RETURN' => 5,
+                'CANCEL' => 6
+            ];
+            $newStatus = $statusMap[$actionType];
+
             $updateData = [
                 'status' => $newStatus,
                 'handled_by' => $userId,
                 'handled_at' => now(),
             ];
 
+            // For CLOSE action, also set closed_by and closed_at
+            if ($actionType === 'CLOSE') {
+                $updateData['closed_by'] = $userId;
+                $updateData['closed_at'] = now();
+
+                // Set rating if provided
+                if (!is_null($rating)) {
+                    $updateData['rating'] = $rating;
+                }
+            }
+
             if (!$this->ticketRepository->updateTicket($ticket, $updateData)) {
                 throw new \Exception('Failed to update ticket');
             }
 
-            // Business logic: Create audit log
+            // Save remarks if provided
+            if (!empty($remarks)) {
+                $this->ticketRepository->createRemarksHistory([
+                    'ticket_id' => $ticket->ticket_id,
+                    'remark_type' => $actionType,
+                    'remark_text' => $remarks,
+                    'old_status' => $oldStatus,
+                    'new_status' => $newStatus,
+                    'created_by' => $userId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            // Create ticket log
+            $logRemarks = !empty($remarks) ? $remarks : ucfirst(strtolower($actionType)) . ' by user';
             $this->ticketRepository->createTicketLog([
                 'ticket_id' => $ticket->ticket_id,
-                'action_type' => strtoupper($actionType),
+                'action_type' => $actionType,
                 'action_by' => $userId,
                 'action_at' => now(),
-                'remarks' => ucfirst(strtolower($actionType)) . ' by user',
+                'remarks' => $logRemarks,
                 'metadata' => json_encode([
                     'ticket' => [
                         'id' => $ticket->id,
@@ -169,6 +212,10 @@ class TicketService
                         'department' => $ticket->department,
                         'station' => $ticket->station,
                         'prodline' => $ticket->prodline,
+                    ],
+                    'status_change' => [
+                        'old_status' => $oldStatus,
+                        'new_status' => $newStatus,
                     ]
                 ]),
             ]);
@@ -180,23 +227,59 @@ class TicketService
     /**
      * Business logic: Determine available action for a ticket
      */
-    private function determineTicketAction($ticket, int $status, array $employeeData, array $userRoles): string
+    private function determineTicketAction($ticket, int $status, array $employeeData, array $userRoles): array
     {
-        $action = 'View';
+        $actions = ['View'];
+        $actionLabel = 'Remarks'; // default
 
-        // Requestor can Close if status = resolved
-        if (($ticket->employid ?? null) == $employeeData['emp_id'] && $status == 2) {
-            $action = 'Close';
-        }
-        // Support staff can Resolve if status = open or returned
-        elseif (in_array('MIS_SUPERVISOR', $userRoles) || in_array('SUPPORT_TECHNICIAN', $userRoles)) {
-            if ($status == 1 || $status == 4) {
-                $action = 'Resolve';
+        $isRequestor = (($ticket->employid ?? null) == $employeeData['emp_id']);
+        $isSupport = in_array('MIS_SUPERVISOR', $userRoles) ||
+            in_array('SUPPORT_TECHNICIAN', $userRoles);
+
+        // OPEN (1)
+        if ($status == 1) {
+            if ($isRequestor) {
+                $actions = ['View', 'Cancel'];
+            } elseif ($isSupport) {
+                $actions = ['Ongoing', 'Resolve', 'Cancel'];
+            } else {
+                $actions = ['View'];
             }
         }
 
-        return $action;
+        // ONGOING (2)
+        if ($status == 2) {
+            if ($isSupport) {
+                $actions = ['Resolve', 'Cancel'];
+            } else {
+                $actions = ['View'];
+            }
+        }
+
+        // RESOLVED (3)
+        if ($status == 3) {
+            if ($isRequestor) {
+                $actions = ['Close', 'Return'];
+            } else {
+                $actions = ['View'];
+            }
+        }
+
+
+
+        // Determine action label
+        if ($actions === ['View', 'Cancel'] || $actions === ['Close', 'Return']) {
+            $actionLabel = 'Remarks';
+        } elseif (in_array('Ongoing', $actions) || in_array('Resolve', $actions)) {
+            $actionLabel = 'Assessment';
+        }
+
+        return [
+            'actions' => $actions,
+            'label' => $actionLabel,
+        ];
     }
+
 
     /**
      * Business logic: Build role-based access conditions
@@ -233,5 +316,42 @@ class TicketService
                 throw new \InvalidArgumentException("Missing required field: {$field}");
             }
         }
+    }
+
+    public function getTicketDetails(string $ticketId, array $employeeData, array $userRoles): ?array
+    {
+        $ticket = $this->ticketRepository->findTicketById($ticketId);
+
+        if (!$ticket) {
+            return null;
+        }
+
+        // Get ticket history
+        $history = $this->ticketRepository->getTicketHistory($ticketId);
+
+        // Determine available actions
+        $status = $ticket->status;
+        $actions = $this->determineTicketAction($ticket, $status, $employeeData, $userRoles);
+
+        // Add status labels and colors
+        $ticket->status_label = TicketStatusService::getStatusLabel($ticket);
+        $ticket->status_color = TicketStatusService::getStatusColor($ticket);
+        $ticket->action = $actions;
+
+        // Add status labels and colors for remarks
+        foreach ($history['remarks'] as $remark) {
+            $remark->old_status_label = TicketStatusService::getStatusLabelById($remark->OLD_STATUS);
+            $remark->old_status_color = TicketStatusService::getStatusColorById($remark->OLD_STATUS);
+
+            $remark->new_status_label = TicketStatusService::getStatusLabelById($remark->NEW_STATUS);
+            $remark->new_status_color = TicketStatusService::getStatusColorById($remark->NEW_STATUS);
+        }
+
+        return [
+            'ticket' => $ticket,
+            'history' => $history['logs'],
+            'remarks' => $history['remarks'],
+            'actions' => $actions,
+        ];
     }
 }

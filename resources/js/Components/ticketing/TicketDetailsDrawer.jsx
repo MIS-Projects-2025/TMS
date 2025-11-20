@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Drawer, Tag } from "antd";
 import dayjs from "dayjs";
 import {
@@ -10,22 +10,12 @@ import {
     ApartmentOutlined,
     CheckCircleOutlined,
     RollbackOutlined,
+    StopOutlined,
+    HistoryOutlined,
+    StarOutlined,
 } from "@ant-design/icons";
 import { TicketIcon } from "lucide-react";
-
-const statusColors = {
-    1: "blue",
-    2: "green",
-    3: "gray",
-    4: "orange",
-};
-
-const statusLabels = {
-    1: "Open",
-    2: "Resolved",
-    3: "Closed",
-    4: "Returned",
-};
+import TicketLogsModal from "./TicketLogsModal";
 
 const TicketDetailsDrawer = ({
     open,
@@ -33,7 +23,27 @@ const TicketDetailsDrawer = ({
     onClose,
     handleButtonClick,
     action,
+    ticketHistory = [],
+    remarksHistory = [],
+    loadingHistory = false,
 }) => {
+    // Move all hooks BEFORE any conditional returns
+    const [remarks, setRemarks] = useState("");
+    const [currentAction, setCurrentAction] = useState("");
+    const [rating, setRating] = useState(0);
+    const [logsModalOpen, setLogsModalOpen] = useState(false);
+
+    useEffect(() => {
+        if (ticket) {
+            setRemarks(ticket.remarks || "");
+            // Initialize rating from ticket if it exists
+            if (ticket.RATING) {
+                setRating(ticket.RATING);
+            }
+        }
+    }, [ticket]);
+
+    // NOW it's safe to return null after all hooks are called
     if (!ticket) return null;
 
     const calcDuration = () => {
@@ -44,73 +54,219 @@ const TicketDetailsDrawer = ({
         return hours > 0 ? `${hours}h ${m}m` : `${mins}m`;
     };
 
+    const combinedHistory = [
+        ...ticketHistory.map((h) => ({
+            ...h,
+            timestamp: h.ACTION_AT || h.CREATED_AT,
+            type: "action",
+        })),
+        ...remarksHistory.map((r) => ({
+            ...r,
+            timestamp: r.CREATED_AT,
+            type: "remark",
+        })),
+    ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    const handleCloseDrawer = () => {
+        setRemarks(ticket.remarks || "");
+        setRating(ticket.RATING || 0);
+        setCurrentAction("");
+        onClose();
+    };
+
+    // Check if ticket has existing rating
+    const hasExistingRating = ticket.RATING && ticket.RATING > 0;
+
     return (
         <Drawer
             title={
-                <div className="flex justify-between items-center">
-                    {/* Left: Ticket # */}
-                    <div className="flex items-center gap-2 font-bold text-lg">
-                        <TicketIcon className="w-5 h-5" />
-                        {ticket.TICKET_ID}
-                    </div>
+                <div className="flex justify-between items-center w-full">
+                    <div className="flex items-center gap-4">
+                        <TicketIcon className="w-6 h-6 text-blue-500" />
+                        <span className="font-semibold text-lg ">
+                            {ticket.TICKET_ID}
+                        </span>
 
-                    {/* Right: Action Buttons */}
-                    <div className="flex gap-2">
-                        {action?.toLowerCase() === "close" ? (
-                            <>
-                                {/* Close button: positive action */}
-                                <button
-                                    className="flex items-center gap-1 px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 text-md"
-                                    onClick={() =>
-                                        handleButtonClick(
-                                            ticket.TICKET_ID,
-                                            "Close"
-                                        )
-                                    }
-                                >
-                                    <CheckCircleOutlined className="w-4 h-4" />
-                                    Close
-                                </button>
-
-                                {/* Return button: back to support */}
-                                <button
-                                    className="flex items-center gap-1 px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600 text-md"
-                                    onClick={() =>
-                                        handleButtonClick(
-                                            ticket.TICKET_ID,
-                                            "Return"
-                                        )
-                                    }
-                                >
-                                    <RollbackOutlined className="w-4 h-4" />
-                                    Return
-                                </button>
-                            </>
-                        ) : action?.toLowerCase() !== "view" ? (
+                        {combinedHistory.length > 0 && (
                             <button
-                                className="flex items-center gap-1 px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-md"
-                                onClick={() =>
-                                    handleButtonClick(ticket.TICKET_ID, action)
-                                }
+                                className="flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full hover:bg-blue-200 transition-colors duration-150"
+                                onClick={() => setLogsModalOpen(true)}
                             >
-                                {/* optional icon for other actions */}
-                                <CheckCircleOutlined className="w-4 h-4" />
-                                {action}
+                                <HistoryOutlined className="w-4 h-4" />
+                                {combinedHistory.length}
                             </button>
-                        ) : null}
+                        )}
+                    </div>
+                    {/* Display existing rating if it exists */}
+                    {hasExistingRating && (
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="font-semibold text-base-800 flex items-center gap-2">
+                                    Requestor Rating:
+                                </span>
+                                <div className="rating rating-xs rating-disabled">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                        <input
+                                            key={star}
+                                            type="radio"
+                                            name="rating-display"
+                                            className="mask mask-star-2 bg-orange-400"
+                                            checked={ticket.RATING === star}
+                                            readOnly
+                                        />
+                                    ))}
+                                </div>
+                                <span className="text-base-600 font-medium">
+                                    ({ticket.RATING}/5)
+                                </span>
+                            </div>
+                        </div>
+                    )}
+                    {/* Action Buttons */}
+                    <div className="flex gap-2">
+                        {currentAction.toLowerCase() !== "close" &&
+                            Array.isArray(action?.actions) &&
+                            action.actions
+                                .filter((a) => a.toLowerCase() !== "view")
+                                .map((a) => {
+                                    const type = a.toLowerCase();
+                                    const colorClasses = {
+                                        close: "bg-green-500 hover:bg-green-600",
+                                        return: "bg-yellow-500 hover:bg-yellow-600",
+                                        resolve:
+                                            "bg-green-500 hover:bg-green-600",
+                                        ongoing:
+                                            "bg-yellow-500 hover:bg-yellow-600",
+                                        cancel: "bg-red-500 hover:bg-red-600",
+                                    };
+                                    const btnColor =
+                                        colorClasses[type] ||
+                                        "bg-blue-500 hover:bg-blue-600";
+
+                                    const icons = {
+                                        close: (
+                                            <CheckCircleOutlined className="w-4 h-4" />
+                                        ),
+                                        return: (
+                                            <RollbackOutlined className="w-4 h-4" />
+                                        ),
+                                        resolve: (
+                                            <CheckCircleOutlined className="w-4 h-4" />
+                                        ),
+                                        ongoing: (
+                                            <CheckCircleOutlined className="w-4 h-4" />
+                                        ),
+                                        cancel: (
+                                            <StopOutlined className="w-4 h-4" />
+                                        ),
+                                    };
+
+                                    return (
+                                        <button
+                                            key={a}
+                                            className={`flex items-center gap-1 px-3 py-1 text-white rounded-lg text-sm shadow-sm ${btnColor} transition-colors duration-150`}
+                                            onClick={() => {
+                                                if (type === "close") {
+                                                    setCurrentAction("close");
+                                                } else {
+                                                    handleButtonClick(
+                                                        ticket.TICKET_ID,
+                                                        a,
+                                                        remarks,
+                                                        rating
+                                                    );
+                                                }
+                                            }}
+                                        >
+                                            {icons[type] || (
+                                                <CheckCircleOutlined className="w-4 h-4" />
+                                            )}
+                                            {a}
+                                        </button>
+                                    );
+                                })}
+
+                        {/* Show Confirm Close only if Close is clicked */}
+                        {currentAction.toLowerCase() === "close" && (
+                            <button
+                                className={`flex items-center gap-1 px-3 py-1 text-white rounded-lg text-sm shadow-sm ${
+                                    rating <= 0
+                                        ? "bg-gray-400 cursor-not-allowed"
+                                        : "bg-green-500 hover:bg-green-600"
+                                } transition-colors duration-150`}
+                                disabled={rating <= 0}
+                                onClick={() => {
+                                    if (rating <= 0) return;
+                                    handleButtonClick(
+                                        ticket.TICKET_ID,
+                                        "Close",
+                                        remarks,
+                                        rating
+                                    );
+                                    setCurrentAction("");
+                                    setRemarks(ticket.remarks || "");
+                                    setRating(0);
+                                }}
+                            >
+                                <CheckCircleOutlined className="w-4 h-4" />
+                                Confirm Close
+                            </button>
+                        )}
                     </div>
                 </div>
             }
             open={open}
-            onClose={onClose}
+            onClose={handleCloseDrawer}
             width={700}
             styles={{ body: { padding: 0 } }}
         >
             <div className="p-5 space-y-6">
-                {/* ===== Top Row: Status, Date, Duration ===== */}
+                {/* Ticket Timeline */}
+                {(ticket.handled_by_name && ticket.HANDLED_AT) ||
+                (ticket.closed_by_name && ticket.CLOSED_AT) ? (
+                    <div>
+                        <h3 className="font-semibold text-base-700 mb-3">
+                            Ticket Timeline
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            {ticket.handled_by_name && ticket.HANDLED_AT && (
+                                <div>
+                                    <div className="text-base-500 text-md flex items-center gap-2">
+                                        <CheckCircleOutlined /> Handled By
+                                    </div>
+                                    <div className="font-semibold text-base-800">
+                                        {ticket.handled_by_name}
+                                    </div>
+                                    <div className="text-base-500 text-sm mt-1">
+                                        {dayjs(ticket.HANDLED_AT).format(
+                                            "MMM DD, YYYY - hh:mm A"
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                            {ticket.closed_by_name && ticket.CLOSED_AT && (
+                                <div>
+                                    <div className="text-base-500 text-md flex items-center gap-2">
+                                        <StopOutlined /> Closed By
+                                    </div>
+                                    <div className="font-semibold text-base-800">
+                                        {ticket.closed_by_name}
+                                    </div>
+                                    <div className="text-base-500 text-sm mt-1">
+                                        {dayjs(ticket.CLOSED_AT).format(
+                                            "MMM DD, YYYY - hh:mm A"
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ) : null}
+
+                {/* Status, Date, Duration */}
                 <div className="flex flex-wrap gap-4 mb-4">
-                    <Tag color={statusColors[ticket.STATUS]}>
-                        {statusLabels[ticket.STATUS]}
+                    <Tag color={ticket.status_color || "default"}>
+                        {ticket.status_label || "-"}
                     </Tag>
                     <span className="text-base-500 text-md">
                         {dayjs(ticket.CREATED_AT).format(
@@ -122,7 +278,7 @@ const TicketDetailsDrawer = ({
                     </span>
                 </div>
 
-                {/* ===== Employee Details ===== */}
+                {/* Employee Details */}
                 <div>
                     <h3 className="font-semibold text-base-700 mb-3">
                         Employee Details
@@ -163,7 +319,7 @@ const TicketDetailsDrawer = ({
                     </div>
                 </div>
 
-                {/* ===== Ticket Details ===== */}
+                {/* Ticket Details */}
                 <div>
                     <h3 className="font-semibold text-base-700 mb-3">
                         Ticket Details
@@ -185,14 +341,17 @@ const TicketDetailsDrawer = ({
                                 {ticket.REQUEST_OPTION}
                             </div>
                         </div>
-                        <div className="sm:col-span-2">
-                            <div className="text-base-500 text-md flex items-center gap-2">
-                                <FileTextOutlined /> Item Name
+                        {ticket.ITEM_NAME && (
+                            <div className="sm:col-span-2">
+                                <div className="text-base-500 text-md flex items-center gap-2">
+                                    <FileTextOutlined /> {ticket.REQUEST_OPTION}{" "}
+                                    Name
+                                </div>
+                                <div className="font-semibold text-base-800">
+                                    {ticket.ITEM_NAME || "-"}
+                                </div>
                             </div>
-                            <div className="font-semibold text-base-800">
-                                {ticket.ITEM_NAME || "-"}
-                            </div>
-                        </div>
+                        )}
                         <div className="sm:col-span-2">
                             <div className="text-base-500 text-md mb-1 flex items-center gap-2">
                                 <FileTextOutlined /> Details
@@ -203,6 +362,53 @@ const TicketDetailsDrawer = ({
                         </div>
                     </div>
                 </div>
+
+                {/* Remarks & Rating for actions */}
+                {currentAction && (
+                    <div>
+                        <h3 className="font-semibold text-base-700 mt-2">
+                            Remarks
+                        </h3>
+                        <textarea
+                            className="textarea textarea-bordered w-full rounded-lg text-sm resize-y mt-2"
+                            rows={4}
+                            placeholder="Enter remarks here..."
+                            value={remarks}
+                            onChange={(e) => setRemarks(e.target.value)}
+                        ></textarea>
+
+                        {currentAction.toLowerCase() === "close" &&
+                            !hasExistingRating && (
+                                <div className="mt-4">
+                                    <label className="block">
+                                        <span className="font-semibold text-base-700 flex items-center gap-2">
+                                            <StarOutlined /> Rate your
+                                            experience (Required)
+                                        </span>
+                                    </label>
+                                    <div className="rating rating-lg mt-2">
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                            <input
+                                                key={star}
+                                                type="radio"
+                                                name="rating"
+                                                className="mask mask-star-2 bg-orange-400"
+                                                checked={rating === star}
+                                                onChange={() => setRating(star)}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                    </div>
+                )}
+
+                <TicketLogsModal
+                    visible={logsModalOpen}
+                    onClose={() => setLogsModalOpen(false)}
+                    history={combinedHistory}
+                    loading={loadingHistory}
+                />
             </div>
         </Drawer>
     );
