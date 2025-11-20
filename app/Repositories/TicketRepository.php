@@ -110,17 +110,8 @@ class TicketRepository
     {
         return TicketLogs::create($logData);
     }
-    public function getRemarksHistoryPaginated(string $ticketId, int $perPage = 10): LengthAwarePaginator
-    {
-        return TicketRemarksHistory::where('ticket_id', $ticketId)
-            ->orderBy('created_at', 'desc')
-            ->paginate($perPage);
-    }
 
-    public function createRemarksHistory(array $remarksData): TicketRemarksHistory
-    {
-        return TicketRemarksHistory::create($remarksData);
-    }
+
     public function findTicketById(string $ticketId): ?Ticket
     {
         return Ticket::where('ticket_id', $ticketId)->first();
@@ -324,31 +315,26 @@ class TicketRepository
             ->orderBy('created_at', 'desc')
             ->get();
 
-        // Map to include action_by name
         return $logs->map(function ($log) {
+            // Decode metadata safely
+            $meta = json_decode($log->METADATA, true);
+
             return [
                 'ID'          => $log->ID,
                 'TICKET_ID'   => $log->TICKET_ID,
                 'ACTION_TYPE' => $log->ACTION_TYPE,
-                'ACTION_BY'   => $log->actor->EMPNAME ?? 'N/A', // map name
+                'ACTION_BY'   => $log->actor->EMPNAME ?? 'N/A',
                 'ACTION_AT'   => $log->ACTION_AT,
                 'REMARKS'     => $log->REMARKS,
-                'METADATA'    => $log->METADATA,
+
+                // Extract old/new status from metadata if present
+                'OLD_STATUS'  => $meta['status_change']['old_status'] ?? null,
+                'NEW_STATUS'  => $meta['status_change']['new_status'] ?? null,
+
                 'CREATED_AT'  => $log->CREATED_AT,
                 'UPDATED_AT'  => $log->UPDATED_AT,
             ];
         });
-    }
-
-
-    /**
-     * Get ticket remarks history for a specific ticket
-     */
-    public function getRemarksHistory(string $ticketId): Collection
-    {
-        return TicketRemarksHistory::where('ticket_id', $ticketId)
-            ->orderBy('created_at', 'desc')
-            ->get();
     }
 
     /**
@@ -358,7 +344,7 @@ class TicketRepository
     {
         return [
             'logs' => $this->getTicketLogs($ticketId),
-            'remarks' => $this->getRemarksHistory($ticketId),
+
         ];
     }
 }

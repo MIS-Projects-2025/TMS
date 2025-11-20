@@ -43,36 +43,32 @@ const TicketingTable = () => {
     });
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [selectedTicket, setSelectedTicket] = useState(null);
-    const [ticketHistory, setTicketHistory] = useState([]);
-    const [remarksHistory, setRemarksHistory] = useState([]);
+    const [ticketLogs, setTicketLogs] = useState([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
 
-    const ticketAndRemarksHistory = async (ticketId) => {
+    const fetchTicketHistory = async (ticketId) => {
         setLoadingHistory(true);
         try {
             const { data } = await axios.get(
                 route("tickets.details", { ticketId })
             );
-            console.log(data);
 
             const { success, message: msg, data: ticketData } = data;
 
             if (!success) {
                 message.error(msg);
-                setTicketHistory([]);
-                setRemarksHistory([]);
+                setTicketLogs([]);
                 return;
             }
 
-            const { history, remarks } = ticketData;
-            setTicketHistory(history);
-            setRemarksHistory(remarks);
-            console.log(ticketData);
+            // Now history is all in logs
+            const { logs } = ticketData;
+            setTicketLogs(logs || []);
+            console.log(logs);
         } catch (err) {
             console.error(err.response || err);
             message.error("Failed to fetch ticket history.");
-            setTicketHistory([]);
-            setRemarksHistory([]);
+            setTicketLogs([]);
         } finally {
             setLoadingHistory(false);
         }
@@ -322,7 +318,7 @@ const TicketingTable = () => {
                                         onClick: () => {
                                             setSelectedTicket(record);
                                             setIsDrawerOpen(true);
-                                            ticketAndRemarksHistory(
+                                            fetchTicketHistory(
                                                 record.TICKET_ID
                                             ); // async fetch
                                         },
@@ -344,8 +340,7 @@ const TicketingTable = () => {
                 onClose={() => setIsDrawerOpen(false)}
                 handleButtonClick={handleTicketAction}
                 action={selectedTicket?.action}
-                ticketHistory={ticketHistory}
-                remarksHistory={remarksHistory}
+                ticketLogs={ticketLogs}
                 loadingHistory={loadingHistory}
             />
         </AuthenticatedLayout>

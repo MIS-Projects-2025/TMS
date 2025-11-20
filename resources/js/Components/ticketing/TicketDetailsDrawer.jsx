@@ -23,11 +23,9 @@ const TicketDetailsDrawer = ({
     onClose,
     handleButtonClick,
     action,
-    ticketHistory = [],
-    remarksHistory = [],
+    ticketLogs = [],
     loadingHistory = false,
 }) => {
-    // Move all hooks BEFORE any conditional returns
     const [remarks, setRemarks] = useState("");
     const [currentAction, setCurrentAction] = useState("");
     const [rating, setRating] = useState(0);
@@ -36,14 +34,10 @@ const TicketDetailsDrawer = ({
     useEffect(() => {
         if (ticket) {
             setRemarks(ticket.remarks || "");
-            // Initialize rating from ticket if it exists
-            if (ticket.RATING) {
-                setRating(ticket.RATING);
-            }
+            if (ticket.RATING) setRating(ticket.RATING);
         }
     }, [ticket]);
 
-    // NOW it's safe to return null after all hooks are called
     if (!ticket) return null;
 
     const calcDuration = () => {
@@ -54,18 +48,14 @@ const TicketDetailsDrawer = ({
         return hours > 0 ? `${hours}h ${m}m` : `${mins}m`;
     };
 
-    const combinedHistory = [
-        ...ticketHistory.map((h) => ({
-            ...h,
-            timestamp: h.ACTION_AT || h.CREATED_AT,
-            type: "action",
-        })),
-        ...remarksHistory.map((r) => ({
-            ...r,
-            timestamp: r.CREATED_AT,
-            type: "remark",
-        })),
-    ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    // Combine logs (all history is in logs now)
+    const combinedHistory = ticketLogs
+        .map((log) => ({
+            ...log,
+            timestamp: log.ACTION_AT || log.CREATED_AT,
+            type: "log",
+        }))
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
     const handleCloseDrawer = () => {
         setRemarks(ticket.remarks || "");
@@ -74,7 +64,6 @@ const TicketDetailsDrawer = ({
         onClose();
     };
 
-    // Check if ticket has existing rating
     const hasExistingRating = ticket.RATING && ticket.RATING > 0;
 
     return (

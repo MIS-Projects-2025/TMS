@@ -176,19 +176,7 @@ class TicketService
                 throw new \Exception('Failed to update ticket');
             }
 
-            // Save remarks if provided
-            if (!empty($remarks)) {
-                $this->ticketRepository->createRemarksHistory([
-                    'ticket_id' => $ticket->ticket_id,
-                    'remark_type' => $actionType,
-                    'remark_text' => $remarks,
-                    'old_status' => $oldStatus,
-                    'new_status' => $newStatus,
-                    'created_by' => $userId,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-            }
+
 
             // Create ticket log
             $logRemarks = !empty($remarks) ? $remarks : ucfirst(strtolower($actionType)) . ' by user';
@@ -320,37 +308,46 @@ class TicketService
 
     public function getTicketDetails(string $ticketId, array $employeeData, array $userRoles): ?array
     {
+        // Fetch the ticket
         $ticket = $this->ticketRepository->findTicketById($ticketId);
-
         if (!$ticket) {
             return null;
         }
 
-        // Get ticket history
-        $history = $this->ticketRepository->getTicketHistory($ticketId);
+        // Get ticket logs (includes old/new status in metadata)
+        $logs = $this->ticketRepository->getTicketLogs($ticketId);
 
         // Determine available actions
         $status = $ticket->status;
         $actions = $this->determineTicketAction($ticket, $status, $employeeData, $userRoles);
 
-        // Add status labels and colors
+        // Add status labels and colors to the ticket itself
         $ticket->status_label = TicketStatusService::getStatusLabel($ticket);
         $ticket->status_color = TicketStatusService::getStatusColor($ticket);
         $ticket->action = $actions;
 
-        // Add status labels and colors for remarks
-        foreach ($history['remarks'] as $remark) {
-            $remark->old_status_label = TicketStatusService::getStatusLabelById($remark->OLD_STATUS);
-            $remark->old_status_color = TicketStatusService::getStatusColorById($remark->OLD_STATUS);
+        // Add labels/colors for old/new status in each log
+        $logs = $logs->map(function ($log) {
+            $log['OLD_STATUS_LABEL'] = $log['OLD_STATUS'] !== null
+                ? TicketStatusService::getStatusLabelById($log['OLD_STATUS'])
+                : null;
+            $log['OLD_STATUS_COLOR'] = $log['OLD_STATUS'] !== null
+                ? TicketStatusService::getStatusColorById($log['OLD_STATUS'])
+                : null;
 
-            $remark->new_status_label = TicketStatusService::getStatusLabelById($remark->NEW_STATUS);
-            $remark->new_status_color = TicketStatusService::getStatusColorById($remark->NEW_STATUS);
-        }
+            $log['NEW_STATUS_LABEL'] = $log['NEW_STATUS'] !== null
+                ? TicketStatusService::getStatusLabelById($log['NEW_STATUS'])
+                : null;
+            $log['NEW_STATUS_COLOR'] = $log['NEW_STATUS'] !== null
+                ? TicketStatusService::getStatusColorById($log['NEW_STATUS'])
+                : null;
+
+            return $log;
+        });
 
         return [
             'ticket' => $ticket,
-            'history' => $history['logs'],
-            'remarks' => $history['remarks'],
+            'logs' => $logs,
             'actions' => $actions,
         ];
     }

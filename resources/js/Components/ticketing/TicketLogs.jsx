@@ -121,57 +121,69 @@ const TicketLogs = ({ history = [], loading = false }) => {
             className="custom-scrollbar"
         >
             <Timeline
-                items={displayedItems.map((item, index) => ({
-                    color:
-                        item.type === "action"
-                            ? getActionColor(item.ACTION_TYPE)
-                            : "gray",
-                    dot:
-                        item.type === "action" ? (
-                            getActionIcon(item.ACTION_TYPE)
-                        ) : (
-                            <FileTextOutlined />
-                        ),
-                    children: (
-                        <div className="pb-4" key={index}>
-                            <div className="flex items-center gap-2 mb-1">
-                                <Tag
-                                    color={getActionColor(
-                                        item.ACTION_TYPE || item.REMARK_TYPE
+                className="ml-4"
+                items={displayedItems.map((item, index) => {
+                    // Determine the color for the dot: if action, use new status color
+                    const dotColor = item.NEW_STATUS_COLOR || "gray";
+
+                    return {
+                        color: dotColor,
+                        dot:
+                            item.type === "action" ? (
+                                getActionIcon(item.ACTION_TYPE)
+                            ) : (
+                                <FileTextOutlined />
+                            ),
+                        children: (
+                            <div className="pb-4" key={index}>
+                                <div className="flex items-center gap-2 mt-4">
+                                    {/* Action Tag */}
+                                    <Tag color={dotColor}>
+                                        {item.ACTION_TYPE || "Remark"}
+                                    </Tag>
+
+                                    {/* Timestamp */}
+                                    <span className="text-xs text-base-500">
+                                        {dayjs(
+                                            item.ACTION_AT || item.timestamp
+                                        ).format("MMM DD, YYYY - hh:mm A")}
+                                    </span>
+                                </div>
+
+                                {/* Status transition */}
+                                {item.OLD_STATUS_LABEL &&
+                                    item.NEW_STATUS_LABEL && (
+                                        <div className="mt-2 flex items-center gap-2 text-sm">
+                                            <Tag
+                                                color={
+                                                    item.OLD_STATUS_COLOR ||
+                                                    "gray"
+                                                }
+                                            >
+                                                {item.OLD_STATUS_LABEL}
+                                            </Tag>
+                                            <span>→</span>
+                                            <Tag
+                                                color={
+                                                    item.NEW_STATUS_COLOR ||
+                                                    "gray"
+                                                }
+                                            >
+                                                {item.NEW_STATUS_LABEL}
+                                            </Tag>
+                                        </div>
                                     )}
-                                >
-                                    {item.ACTION_TYPE || item.REMARK_TYPE}
-                                </Tag>
-                                <span className="text-xs text-base-500">
-                                    {dayjs(item.timestamp).format(
-                                        "MMM DD, YYYY - hh:mm A"
-                                    )}
-                                </span>
+
+                                {/* Remarks */}
+                                {item.REMARKS && (
+                                    <div className="mt-2 text-sm text-gray-600">
+                                        {item.REMARKS}
+                                    </div>
+                                )}
                             </div>
-                            {item.REMARKS && (
-                                <div className="text-sm text-base-700 mt-1 bg-base-50 p-2 rounded">
-                                    {item.REMARKS}
-                                </div>
-                            )}
-                            {item.REMARK_TEXT && (
-                                <div className="text-sm text-base-700 mt-1 bg-base-50 p-2 rounded">
-                                    {item.REMARK_TEXT}
-                                </div>
-                            )}
-                            {item.ACTION_BY && (
-                                <div className="text-xs text-base-500 mt-1">
-                                    By: {item.ACTION_BY}
-                                </div>
-                            )}
-                            {item.OLD_STATUS && item.NEW_STATUS && (
-                                <div className="text-xs text-base-500 mt-1">
-                                    Status: {item.old_status_label} →{" "}
-                                    {item.new_status_label}
-                                </div>
-                            )}
-                        </div>
-                    ),
-                }))}
+                        ),
+                    };
+                })}
             />
 
             {/* Loading More Indicator */}
@@ -195,23 +207,6 @@ const TicketLogs = ({ history = [], loading = false }) => {
             <div className="text-center py-2 text-xs text-gray-400">
                 Showing {displayedItems.length} of {history.length} items
             </div>
-
-            <style jsx>{`
-                .custom-scrollbar::-webkit-scrollbar {
-                    width: 8px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-track {
-                    background: #f1f1f1;
-                    border-radius: 10px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb {
-                    background: #888;
-                    border-radius: 10px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-                    background: #555;
-                }
-            `}</style>
         </div>
     );
 };
