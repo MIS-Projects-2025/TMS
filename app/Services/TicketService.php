@@ -157,10 +157,12 @@ class TicketService
 
             $updateData = [
                 'status' => $newStatus,
-                'handled_by' => $userId,
-                'handled_at' => now(),
-            ];
 
+            ];
+            if ($actionType === 'RESOLVE') {
+                $updateData['handled_by'] = $userId;
+                $updateData['handled_at'] = now();
+            }
             // For CLOSE action, also set closed_by and closed_at
             if ($actionType === 'CLOSE') {
                 $updateData['closed_by'] = $userId;

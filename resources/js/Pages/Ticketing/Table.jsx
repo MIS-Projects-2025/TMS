@@ -76,21 +76,27 @@ const TicketingTable = () => {
 
     const handleTicketAction = async (ticketId, action, remarks, rating) => {
         console.log(action);
+
         if (!remarks) {
             message.error("Please enter remarks.");
+            return;
         }
+
+        // Build payload
+        const payload = {
+            ticket_id: ticketId,
+            action,
+            remarks,
+            // Only include rating for CLOSE action
+            ...(action.toUpperCase() === "CLOSE" ? { rating } : {}),
+        };
+
         try {
-            const res = await axios.post(route("tickets.action"), {
-                ticket_id: ticketId,
-                action,
-                remarks,
-                rating,
-            });
+            const res = await axios.post(route("tickets.action"), payload);
             if (res.data.success) {
                 message.success(res.data.message);
                 setIsDrawerOpen(false);
                 window.location.reload();
-                // optionally refresh table
             } else {
                 message.error(res.data.message);
             }
@@ -268,7 +274,7 @@ const TicketingTable = () => {
                     </div>
 
                     {/* Table Container */}
-                    <div className="p-6 bg-base-200 min-h-screen transition-all duration-300 border border-base-300 rounded-xl shadow-sm">
+                    <div className="p-6 bg-base-200  transition-all duration-300 border border-base-300 rounded-xl shadow-sm">
                         {/* Filters */}
                         <div className="flex flex-wrap justify-between items-center mb-4 gap-3">
                             <div className="flex items-center gap-2">

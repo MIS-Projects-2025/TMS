@@ -13,6 +13,7 @@ import {
     StopOutlined,
     HistoryOutlined,
     StarOutlined,
+    ClockCircleOutlined,
 } from "@ant-design/icons";
 import { TicketIcon } from "lucide-react";
 import TicketLogsModal from "./TicketLogsModal";
@@ -39,12 +40,20 @@ const TicketDetailsDrawer = ({
     }, [ticket]);
 
     if (!ticket) return null;
-
     const calcDuration = () => {
         const created = new Date(ticket.CREATED_AT.replace(" ", "T"));
-        const mins = Math.floor((Date.now() - created) / 60000);
+
+        // Use CLOSED_AT first, then HANDLED_AT, then fallback to now
+        const endTime = ticket.CLOSED_AT
+            ? new Date(ticket.CLOSED_AT.replace(" ", "T"))
+            : ticket.HANDLED_AT
+            ? new Date(ticket.HANDLED_AT.replace(" ", "T"))
+            : new Date();
+
+        const mins = Math.floor((endTime - created) / 60000);
         const hours = Math.floor(mins / 60);
         const m = mins % 60;
+
         return hours > 0 ? `${hours}h ${m}m` : `${mins}m`;
     };
 
@@ -65,7 +74,10 @@ const TicketDetailsDrawer = ({
     };
 
     const hasExistingRating = ticket.RATING && ticket.RATING > 0;
-
+    const isViewAction =
+        Array.isArray(action?.actions) &&
+        action.actions.length === 1 &&
+        action.actions[0].toLowerCase() === "view";
     return (
         <Drawer
             title={
@@ -206,9 +218,22 @@ const TicketDetailsDrawer = ({
             }
             open={open}
             onClose={handleCloseDrawer}
-            width={700}
+            width={800}
             styles={{ body: { padding: 0 } }}
         >
+            {/* Status, Date, Duration */}
+            <div className="flex flex-wrap gap-4 mt-4 ml-4">
+                <Tag color={ticket.status_color || "default"}>
+                    {ticket.status_label || "-"}
+                </Tag>
+                <Tag color={ticket.status_color || "default"}>
+                    Created At:{" "}
+                    {dayjs(ticket.CREATED_AT).format("MMM DD, YYYY - hh:mm A")}
+                </Tag>
+                <Tag color={ticket.status_color || "default"}>
+                    <FieldTimeOutlined /> {calcDuration()}
+                </Tag>
+            </div>
             <div className="p-5 space-y-6">
                 {/* Ticket Timeline */}
                 {(ticket.handled_by_name && ticket.HANDLED_AT) ||
@@ -217,11 +242,11 @@ const TicketDetailsDrawer = ({
                         <h3 className="font-semibold text-base-700 mb-3">
                             Ticket Timeline
                         </h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-2">
                             {ticket.handled_by_name && ticket.HANDLED_AT && (
                                 <div>
                                     <div className="text-base-500 text-md flex items-center gap-2">
-                                        <CheckCircleOutlined /> Handled By
+                                        <ClockCircleOutlined /> Handled By
                                     </div>
                                     <div className="font-semibold text-base-800">
                                         {ticket.handled_by_name}
@@ -236,7 +261,7 @@ const TicketDetailsDrawer = ({
                             {ticket.closed_by_name && ticket.CLOSED_AT && (
                                 <div>
                                     <div className="text-base-500 text-md flex items-center gap-2">
-                                        <StopOutlined /> Closed By
+                                        <CheckCircleOutlined /> Closed By
                                     </div>
                                     <div className="font-semibold text-base-800">
                                         {ticket.closed_by_name}
@@ -252,27 +277,12 @@ const TicketDetailsDrawer = ({
                     </div>
                 ) : null}
 
-                {/* Status, Date, Duration */}
-                <div className="flex flex-wrap gap-4 mb-4">
-                    <Tag color={ticket.status_color || "default"}>
-                        {ticket.status_label || "-"}
-                    </Tag>
-                    <span className="text-base-500 text-md">
-                        {dayjs(ticket.CREATED_AT).format(
-                            "MMM DD, YYYY - hh:mm A"
-                        )}
-                    </span>
-                    <span className="text-base-500 text-md flex items-center gap-1">
-                        <FieldTimeOutlined /> {calcDuration()}
-                    </span>
-                </div>
-
                 {/* Employee Details */}
                 <div>
                     <h3 className="font-semibold text-base-700 mb-3">
                         Employee Details
                     </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-2">
                         <div>
                             <div className="text-base-500 text-md flex items-center gap-2">
                                 <UserOutlined /> Requestor
@@ -313,7 +323,7 @@ const TicketDetailsDrawer = ({
                     <h3 className="font-semibold text-base-700 mb-3">
                         Ticket Details
                     </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-2">
                         <div>
                             <div className="text-base-500 text-md flex items-center gap-2">
                                 <TagsOutlined /> Request Type
@@ -353,7 +363,8 @@ const TicketDetailsDrawer = ({
                 </div>
 
                 {/* Remarks & Rating for actions */}
-                {currentAction && (
+
+                {!isViewAction && (
                     <div>
                         <h3 className="font-semibold text-base-700 mt-2">
                             Remarks
@@ -366,6 +377,7 @@ const TicketDetailsDrawer = ({
                             onChange={(e) => setRemarks(e.target.value)}
                         ></textarea>
 
+                        {/* Rating only for CLOSE action without existing rating */}
                         {currentAction.toLowerCase() === "close" &&
                             !hasExistingRating && (
                                 <div className="mt-4">

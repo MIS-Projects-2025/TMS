@@ -22,7 +22,7 @@ export default function StatCard({
 
     return (
         <div
-            className={`cursor-pointer transition-all duration-300 border shadow-md hover:shadow-lg rounded-tl-xl rounded-br-xl relative overflow-hidden
+            className={`cursor-pointer transition-all duration-300 border shadow-md hover:shadow-lg rounded-tl-2xl rounded-br-2xl relative overflow-hidden
                 ${
                     isActive
                         ? `bg-base-100 ${borderClass} border-2`
