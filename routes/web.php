@@ -6,6 +6,7 @@ use Inertia\Inertia;
 
 $app_name = env('APP_NAME', '');
 Route::redirect('/', "/$app_name");
+require __DIR__ . '/api.php';
 // Authentication routes
 require __DIR__ . '/auth.php';
 

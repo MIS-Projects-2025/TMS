@@ -1,6 +1,6 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
-import React, { useState } from "react";
-import { usePage } from "@inertiajs/react";
+import React, { useState, useEffect } from "react";
+import { usePage, router } from "@inertiajs/react";
 import { Table, Tag, Spin, Tooltip, Empty, message } from "antd";
 import {
     AppstoreOutlined,
@@ -17,6 +17,7 @@ import StatCard from "@/Components/ticketing/StatCard";
 import useTicketingTable from "@/Hooks/useTicketTable";
 import TicketDetailsDrawer from "@/Components/ticketing/TicketDetailsDrawer";
 import DurationCell from "@/Components/ticketing/DurationCell";
+import { useNotifications } from "@/Context/NotificationContext";
 
 const TicketingTable = () => {
     const {
@@ -26,7 +27,6 @@ const TicketingTable = () => {
         statusCounts,
         filters: initialFilters,
     } = usePage().props;
-    console.log(usePage().props);
 
     const {
         loading,
@@ -41,10 +41,35 @@ const TicketingTable = () => {
         filters: initialFilters,
         statusCounts,
     });
+
+    const { ticketUpdates, clearTicketUpdates } = useNotifications();
+
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [selectedTicket, setSelectedTicket] = useState(null);
     const [ticketLogs, setTicketLogs] = useState([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
+
+    // Handle real-time ticket updates by refetching the table
+    useEffect(() => {
+        if (ticketUpdates.length === 0) return;
+
+        console.log("🔄 Processing ticket updates:", ticketUpdates);
+
+        // Show toast notification for updates
+        ticketUpdates.forEach((update) => {
+            message.info(`Ticket ${update.ticketId} has been updated`, 2);
+        });
+
+        // Clear processed updates
+        clearTicketUpdates();
+
+        // Refetch the table with current filters
+        router.reload({
+            only: ["tickets", "statusCounts", "pagination"],
+            preserveScroll: true,
+            preserveState: true,
+        });
+    }, [ticketUpdates, clearTicketUpdates]);
 
     const fetchTicketHistory = async (ticketId) => {
         setLoadingHistory(true);
@@ -61,10 +86,8 @@ const TicketingTable = () => {
                 return;
             }
 
-            // Now history is all in logs
             const { logs } = ticketData;
             setTicketLogs(logs || []);
-            console.log(logs);
         } catch (err) {
             console.error(err.response || err);
             message.error("Failed to fetch ticket history.");
@@ -104,7 +127,6 @@ const TicketingTable = () => {
             message.error("Failed to update ticket.");
         }
     };
-
     const columns = [
         {
             title: "Ticket ID",
@@ -163,7 +185,6 @@ const TicketingTable = () => {
                     </Tag>
                 );
 
-                // Optional tooltip for critical tickets
                 if (record.STATUS === 1 && isTicketCritical(record)) {
                     return (
                         <Tooltip
@@ -274,7 +295,7 @@ const TicketingTable = () => {
                     </div>
 
                     {/* Table Container */}
-                    <div className="p-6 bg-base-200  transition-all duration-300 border border-base-300 rounded-xl shadow-sm">
+                    <div className="p-6 bg-base-200 transition-all duration-300 border border-base-300 rounded-xl shadow-sm">
                         {/* Filters */}
                         <div className="flex flex-wrap justify-between items-center mb-4 gap-3">
                             <div className="flex items-center gap-2">
@@ -326,7 +347,7 @@ const TicketingTable = () => {
                                             setIsDrawerOpen(true);
                                             fetchTicketHistory(
                                                 record.TICKET_ID
-                                            ); // async fetch
+                                            );
                                         },
                                         style: { cursor: "pointer" },
                                     })}

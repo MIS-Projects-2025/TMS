@@ -1,5 +1,6 @@
 import { Link, usePage, router } from "@inertiajs/react";
 import { useState } from "react";
+import NotificationBell from "./NotificationBell";
 
 export default function NavBar() {
     const { emp_data } = usePage().props;
@@ -14,10 +15,11 @@ export default function NavBar() {
     };
 
     return (
-        <nav className="">
+        <nav className="mt-2">
             <div className="px-4 mx-auto sm:px-6 lg:px-8">
                 <div className="flex justify-end h-[50px] ">
                     <div className="items-center hidden mr-5 space-x-1 font-semibold md:flex">
+                        <NotificationBell />
                         <div className="dropdown dropdown-end">
                             <div
                                 tabIndex={0}

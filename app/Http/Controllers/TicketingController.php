@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\TicketService;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -12,11 +13,16 @@ class TicketingController extends Controller
 {
     protected TicketService $ticketService;
     protected UserRoleService $userRoleService;
+    protected NotificationService $notificationService;
 
-    public function __construct(TicketService $ticketService, UserRoleService $userRoleService)
-    {
+    public function __construct(
+        TicketService $ticketService,
+        UserRoleService $userRoleService,
+        NotificationService $notificationService
+    ) {
         $this->ticketService = $ticketService;
         $this->userRoleService = $userRoleService;
+        $this->notificationService = $notificationService;
     }
 
     /**
@@ -33,7 +39,6 @@ class TicketingController extends Controller
      */
     public function storeTicket(Request $request)
     {
-
         $request->validate([
             'request_type' => 'required|string',
             'request_option' => 'required|string',
@@ -60,7 +65,9 @@ class TicketingController extends Controller
                 'emp_station' => $empData['emp_station'] ?? 'Unknown',
             ];
 
+            // Create the ticket
             $result = $this->ticketService->createTicket($ticketData, $employeeData);
+
 
             return response()->json([
                 'success' => true,
@@ -101,6 +108,7 @@ class TicketingController extends Controller
             'filters' => $result['filters'],
         ])->with('flash', ['message' => 'Tickets loaded successfully']);
     }
+
     public function getTicketDetails(Request $request, string $ticketId)
     {
         $empData = session('emp_data');
@@ -137,12 +145,12 @@ class TicketingController extends Controller
 
     public function ticketAction(Request $request)
     {
-        // dd($request->all());
         $empData = session('emp_data');
         $ticketId = $request->input('ticket_id');
         $remarks = $request->input('remarks');
         $rating = $request->input('rating');
         $actionType = strtoupper($request->input('action'));
+
         $request->merge([
             'action' => $actionType
         ]);

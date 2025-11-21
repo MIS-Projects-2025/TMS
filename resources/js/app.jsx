@@ -7,7 +7,7 @@ import { createInertiaApp } from "@inertiajs/react";
 import { resolvePageComponent } from "laravel-vite-plugin/inertia-helpers";
 import { ConfigProvider, theme as antdTheme } from "antd";
 import { ThemeProvider, ThemeContext } from "../js/Components/ThemeContext";
-// import { NotificationProvider } from "./Context/NotificationContext";
+import { NotificationProvider } from "./Context/NotificationContext";
 // import Snowfall from "react-snowfall";
 
 const rawAppName = import.meta.env.VITE_APP_NAME || "Laravel";
@@ -53,9 +53,9 @@ createInertiaApp({
                                                 : antdTheme.defaultAlgorithm,
                                     }}
                                 >
-                                    {/* <NotificationProvider userId={userId}> */}
-                                    <div style={{ position: "relative" }}>
-                                        {/* {isSnowSeason && (
+                                    <NotificationProvider userId={userId}>
+                                        <div style={{ position: "relative" }}>
+                                            {/* {isSnowSeason && (
                                                 <Snowfall
                                                     color={snowColor}
                                                     snowflakeCount={150}
@@ -73,9 +73,9 @@ createInertiaApp({
                                                     }}
                                                 />
                                             )} */}
-                                        <App {...props} />
-                                    </div>
-                                    {/* </NotificationProvider> */}
+                                            <App {...props} />
+                                        </div>
+                                    </NotificationProvider>
                                 </ConfigProvider>
                             );
                         }}

@@ -4,22 +4,34 @@ namespace App\Services;
 
 use App\Repositories\TicketRepository;
 use App\Repositories\TicketRequestTypeRepository;
-use Illuminate\Support\Facades\DB;
 use App\Services\TicketStatusService;
-use Illuminate\Pagination\LengthAwarePaginator;
+use App\Services\UserRoleService;
+use App\Services\NotificationService;
+use Illuminate\Support\Facades\DB;
+use App\Repositories\UserRepository;
 
 class TicketService
 {
     protected TicketRepository $ticketRepository;
     protected TicketRequestTypeRepository $requestTypeRepository;
+    protected NotificationService $notificationService;
+    protected UserRoleService $userRoleService;
+    protected UserRepository $userRepo;
 
     public function __construct(
         TicketRepository $ticketRepository,
-        TicketRequestTypeRepository $requestTypeRepository
+        TicketRequestTypeRepository $requestTypeRepository,
+        NotificationService $notificationService,
+        UserRoleService $userRoleService,
+        UserRepository $userRepo
     ) {
         $this->ticketRepository = $ticketRepository;
         $this->requestTypeRepository = $requestTypeRepository;
+        $this->notificationService = $notificationService;
+        $this->userRoleService = $userRoleService;
+        $this->userRepo = $userRepo;
     }
+
 
     public function getTicketFormData(): array
     {
@@ -44,13 +56,9 @@ class TicketService
 
     public function createTicket(array $ticketData, array $employeeData): array
     {
-        // Business validation
         $this->validateTicketData($ticketData);
 
-        // Business logic: Generate ticket number
         $ticketId = $this->ticketRepository->generateTicketNumber();
-
-        // Business logic: Prepare ticket structure
         $mainTicketData = [
             'ticket_id' => $ticketId,
             'employid' => $employeeData['emp_id'],
@@ -62,32 +70,34 @@ class TicketService
             'request_option' => $ticketData['request_option'],
             'item_name' => $ticketData['item_name'] ?? null,
             'details' => $ticketData['details'],
-            'status' => 1, // Business rule: new tickets are open
+            'status' => 1, // Open
             'created_at' => now(),
         ];
 
-        // Business transaction
         return DB::transaction(function () use ($mainTicketData, $ticketId, $ticketData, $employeeData) {
-            // Create ticket
+
             $ticket = $this->ticketRepository->createTicket($mainTicketData);
 
-            // Business logic: Create audit trail
+            // Log creation
             $this->ticketRepository->createTicketLog([
                 'ticket_id' => $ticketId,
                 'action_type' => 'CREATED',
                 'action_by' => $employeeData['emp_id'],
                 'action_at' => now(),
                 'remarks' => 'Ticket created by user',
-                'metadata' => json_encode([
-                    'form_data' => $ticketData,
-                    'employee_data' => $employeeData
-                ]),
+                'metadata' => json_encode(['form_data' => $ticketData, 'employee_data' => $employeeData]),
             ]);
 
-            return [
-                'ticket' => $ticket,
-                'ticket_id' => $ticketId
-            ];
+            // Notify MIS support
+            $this->notificationService->notifyTicketAction(
+                $ticket,
+                'Created',
+                ['emp_id' => $employeeData['emp_id'], 'name' => $employeeData['emp_name']],
+                $employeeData,
+                ['MIS_SUPERVISOR', 'SUPPORT_TECHNICIAN']
+            );
+
+            return ['ticket' => $ticket, 'ticket_id' => $ticketId];
         });
     }
 
@@ -130,19 +140,22 @@ class TicketService
         ];
     }
 
-    public function ticketAction(string $ticketId, string $userId, string $actionType = 'RESOLVE', string $remarks = '', ?int $rating = null): bool
-    {
+    public function ticketAction(
+        string $ticketId,
+        string $userId,
+        string $actionType = 'RESOLVE',
+        string $remarks = '',
+        ?int $rating = null
+    ): bool {
         $actionType = strtoupper($actionType);
-
         if (!in_array($actionType, ['RESOLVE', 'CLOSE', 'RETURN', 'ONGOING', 'CANCEL'])) {
             throw new \InvalidArgumentException('Invalid action type');
         }
 
         return DB::transaction(function () use ($ticketId, $userId, $actionType, $remarks, $rating) {
+
             $ticket = $this->ticketRepository->findTicketById($ticketId);
-            if (!$ticket) {
-                return false;
-            }
+            if (!$ticket) return false;
 
             $oldStatus = $ticket->status;
 
@@ -155,33 +168,21 @@ class TicketService
             ];
             $newStatus = $statusMap[$actionType];
 
-            $updateData = [
-                'status' => $newStatus,
-
-            ];
+            $updateData = ['status' => $newStatus];
             if ($actionType === 'RESOLVE') {
                 $updateData['handled_by'] = $userId;
                 $updateData['handled_at'] = now();
             }
-            // For CLOSE action, also set closed_by and closed_at
             if ($actionType === 'CLOSE') {
                 $updateData['closed_by'] = $userId;
                 $updateData['closed_at'] = now();
-
-                // Set rating if provided
-                if (!is_null($rating)) {
-                    $updateData['rating'] = $rating;
-                }
+                if (!is_null($rating)) $updateData['rating'] = $rating;
             }
 
-            if (!$this->ticketRepository->updateTicket($ticket, $updateData)) {
-                throw new \Exception('Failed to update ticket');
-            }
+            $this->ticketRepository->updateTicket($ticket, $updateData);
 
-
-
-            // Create ticket log
-            $logRemarks = !empty($remarks) ? $remarks : ucfirst(strtolower($actionType)) . ' by user';
+            // Log action
+            $logRemarks = $remarks ?: ucfirst(strtolower($actionType)) . ' by user';
             $this->ticketRepository->createTicketLog([
                 'ticket_id' => $ticket->ticket_id,
                 'action_type' => $actionType,
@@ -196,23 +197,24 @@ class TicketService
                         'item_name' => $ticket->item_name,
                         'details' => $ticket->details,
                     ],
-                    'employee' => [
-                        'id' => $ticket->employid,
-                        'name' => $ticket->empname,
-                        'department' => $ticket->department,
-                        'station' => $ticket->station,
-                        'prodline' => $ticket->prodline,
-                    ],
-                    'status_change' => [
-                        'old_status' => $oldStatus,
-                        'new_status' => $newStatus,
-                    ]
+                    'status_change' => ['old_status' => $oldStatus, 'new_status' => $newStatus]
                 ]),
             ]);
+
+            // Get the actual actor's name
+            $actorUser = $this->userRepo->findUserById($userId);
+            $actorData = [
+                'emp_id' => $userId,
+                'name' => $actorUser->empname ?? 'Unknown'
+            ];
+
+            // Send notification — recipients determined inside NotificationService
+            $this->notificationService->notifyTicketAction($ticket, $actionType, $actorData);
 
             return true;
         });
     }
+
 
     /**
      * Business logic: Determine available action for a ticket

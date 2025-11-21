@@ -87,7 +87,7 @@ export const useTicketForm = () => {
     // Tiga check kung kailangan ipakita ang custom input field
     const showCustomInput =
         (showItemSelect && selectedItem === "Others") ||
-        (!showItemSelect && selectedOption && selectedOption !== "");
+        (selectedType === "Other Services" && selectedOption === "Others");
 
     return {
         emp_data,

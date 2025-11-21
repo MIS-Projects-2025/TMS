@@ -347,4 +347,42 @@ class TicketRepository
 
         ];
     }
+    /**
+     * Get all MIS support users (supervisors + technicians)
+     */
+    public function getMISSupportUsers(): array
+    {
+        return DB::connection('masterlist')
+            ->table('employee_masterlist')
+            ->select('EMPLOYID as emp_id', 'EMPNAME as empname')
+            ->whereRaw("UPPER(DEPARTMENT) = 'MIS'")
+            ->where(function ($query) {
+                $query->whereRaw("LOWER(JOB_TITLE) LIKE ?", ['%mis support technician%'])
+                    ->orWhere(function ($q) {
+                        $q->whereRaw("LOWER(JOB_TITLE) LIKE ?", ['%mis%'])
+                            ->whereRaw("LOWER(JOB_TITLE) LIKE ?", ['%supervisor%']);
+                    });
+            })
+            ->get()
+            ->toArray();
+    }
+
+    /**
+     * Find a user by their employee ID
+     */
+    public function findUserById(string $empId): ?object
+    {
+        return DB::connection('masterlist')
+            ->table('employee_masterlist')
+            ->where('EMPLOYID', $empId)
+            ->select('EMPLOYID as emp_id', 'EMPNAME as empname')
+            ->first();
+    }
+    public function getJobTitle(string $empId): ?string
+    {
+        return DB::connection('masterlist')
+            ->table('employee_masterlist')
+            ->where('EMPLOYID', $empId)
+            ->value('JOB_TITLE');
+    }
 }
