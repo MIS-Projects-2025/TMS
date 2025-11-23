@@ -385,4 +385,60 @@ class TicketRepository
             ->where('EMPLOYID', $empId)
             ->value('JOB_TITLE');
     }
+    public function getTicketsHandledPerSupport(): array
+    {
+        $records = DB::table('ticketing_support_workflow')
+            ->select('ACTION_BY', DB::raw('COUNT(*) as total'))
+            ->whereIn('ACTION_TYPE', ['RESOLVE', 'CLOSE'])
+            ->groupBy('ACTION_BY')
+            ->orderByDesc('total')
+            ->get()
+            ->toArray();
+
+        // Attach employee names
+        return array_map(function ($item) {
+            $user = $this->findUserById($item->ACTION_BY);
+
+            $item->emp_name = $user->empname ?? "Unknown User";
+            $item->emp_id = $user->emp_id ?? $item->ACTION_BY;
+
+            return $item;
+        }, $records);
+    }
+
+    public function getAverageHandlingTime(): array
+    {
+        $records = DB::table('ticketing_support as t')
+            ->join('ticketing_support_workflow as l', 't.ticket_id', '=', 'l.TICKET_ID')
+            ->select(
+                'l.ACTION_BY',
+                DB::raw('AVG(TIMESTAMPDIFF(MINUTE, t.created_at, l.ACTION_AT)) as avg_minutes')
+            )
+            ->whereIn('l.ACTION_TYPE', ['RESOLVE', 'CLOSE'])
+            ->groupBy('l.ACTION_BY')
+            ->orderBy('avg_minutes')
+            ->get()
+            ->toArray();
+
+        // Attach employee names
+        return array_map(function ($item) {
+            $user = $this->findUserById($item->ACTION_BY);
+
+            $item->emp_name = $user->empname ?? "Unknown User";
+            $item->emp_id = $user->emp_id ?? $item->ACTION_BY;
+
+            return $item;
+        }, $records);
+    }
+
+
+    public function getTicketsPerDay(): array
+    {
+        return DB::table('ticketing_support')
+            ->select(DB::raw('DATE(created_at) as day'), DB::raw('COUNT(*) as total'))
+            ->groupBy('day')
+            ->orderBy('day')
+            ->get()
+            ->toArray();
+    }
 }

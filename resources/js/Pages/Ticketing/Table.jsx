@@ -298,18 +298,21 @@ const TicketingTable = () => {
                     <div className="p-6 bg-base-200 transition-all duration-300 border border-base-300 rounded-xl shadow-sm">
                         {/* Filters */}
                         <div className="flex flex-wrap justify-between items-center mb-4 gap-3">
-                            <div className="flex items-center gap-2">
-                                <SearchOutlined className="w-4 h-4 text-base-content/70" />
-                                <input
-                                    type="text"
-                                    placeholder="Search tickets..."
-                                    value={searchValue}
-                                    onChange={(e) =>
-                                        handleSearch(e.target.value)
-                                    }
-                                    className="input input-bordered input-sm w-64"
-                                />
-                            </div>
+                            {tickets && tickets.length > 0 && (
+                                <div className="flex items-center gap-2">
+                                    <SearchOutlined className="w-4 h-4 text-base-content/70" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search tickets..."
+                                        value={searchValue}
+                                        onChange={(e) =>
+                                            handleSearch(e.target.value)
+                                        }
+                                        className="input input-bordered input-sm w-64"
+                                    />
+                                </div>
+                            )}
+
                             {activeFilter === "critical" && (
                                 <div className="bg-red-100 border border-red-300 text-red-800 px-3 py-1 rounded-lg text-sm">
                                     ⚠️ Showing tickets open for more than 30
@@ -345,6 +348,7 @@ const TicketingTable = () => {
                                         onClick: () => {
                                             setSelectedTicket(record);
                                             setIsDrawerOpen(true);
+
                                             fetchTicketHistory(
                                                 record.TICKET_ID
                                             );

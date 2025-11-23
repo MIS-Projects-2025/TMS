@@ -27,6 +27,7 @@ const TicketDetailsDrawer = ({
     ticketLogs = [],
     loadingHistory = false,
 }) => {
+    console.log("Ticket details:", ticket);
     const [remarks, setRemarks] = useState("");
     const [currentAction, setCurrentAction] = useState("");
     const [rating, setRating] = useState(0);

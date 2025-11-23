@@ -3,15 +3,24 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
-use Carbon\Carbon;
+use App\Services\DashboardService;
 
 class DashboardController extends Controller
 {
+    protected $dash;
+
+    public function __construct(DashboardService $dash)
+    {
+        $this->dash = $dash;
+    }
 
     public function index(Request $request)
     {
-        return Inertia::render('Dashboard');
+        $data = $this->dash->getDashboardData();
+
+        return Inertia::render('Dashboard', [
+            'dashboard' => $data
+        ]);
     }
 }

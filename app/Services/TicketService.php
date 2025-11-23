@@ -242,7 +242,7 @@ class TicketService
         // ONGOING (2)
         if ($status == 2) {
             if ($isSupport) {
-                $actions = ['Resolve', 'Cancel'];
+                $actions = ['Ongoing', 'Resolve',];
             } else {
                 $actions = ['View'];
             }
@@ -257,6 +257,14 @@ class TicketService
             }
         }
 
+        // RETURNED (5)
+        if ($status == 5) {
+            if ($isSupport) {
+                $actions = ['Ongoing', 'Resolve',];
+            } else {
+                $actions = ['View'];
+            }
+        }
 
 
         // Determine action label
