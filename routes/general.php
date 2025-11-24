@@ -6,6 +6,7 @@ use App\Http\Middleware\AdminMiddleware;
 use App\Http\Middleware\AuthMiddleware;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\DashboardController;
+use App\Http\Middleware\SupportMiddleware;
 
 $app_name = env('APP_NAME', '');
 
@@ -20,8 +21,9 @@ Route::prefix($app_name)->middleware(AuthMiddleware::class)->group(function () {
     Route::post("/remove-admin", [AdminController::class, 'removeAdmin'])->name('removeAdmin');
     Route::patch("/change-admin-role", [AdminController::class, 'changeAdminRole'])->name('changeAdminRole');
   });
-
-  Route::get("/", [DashboardController::class, 'index'])->name('dashboard');
+  Route::middleware(SupportMiddleware::class)->group(function () {
+    Route::get("/", [DashboardController::class, 'index'])->name('dashboard');
+  });
   Route::get("/profile", [ProfileController::class, 'index'])->name('profile.index');
   Route::post("/change-password", [ProfileController::class, 'changePassword'])->name('changePassword');
 });

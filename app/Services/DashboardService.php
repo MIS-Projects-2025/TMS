@@ -13,13 +13,21 @@ class DashboardService
         $this->tickets = $tickets;
     }
 
-    public function getDashboardData(): array
+    public function getDashboardData($user): array
     {
+        // Determine if user is support or supervisor+
+        $isSupervisorOrAbove = in_array($user['emp_system_role'] ?? 'support', ['supervisor', 'manager', 'admin']);
+        $userId = $isSupervisorOrAbove ? null : ($user['emp_id'] ?? null);
+        // dd($user['emp_system_role']);
         return [
-            'ticketsHandled' => $this->tickets->getTicketsHandledPerSupport(),
-            'avgHandlingTime' => $this->tickets->getAverageHandlingTime(),
-            'statusCounts' => $this->tickets->getStatusCounts(),
-            'ticketsPerDay' => $this->tickets->getTicketsPerDay(),
+            'responseTime' => $this->tickets->getResponseTime($userId),
+            'ticketsPerDay' => $this->tickets->getTicketsPerDay($userId),
+            'ticketsHandled' => $this->tickets->getTicketsHandled($userId),
+            'closureRate' => $this->tickets->getClosureRate($userId),
+            'issuesPerRequest' => $this->tickets->getIssuesPerRequest($userId),
+            'avgResponseTimePerIssue' => $this->tickets->getAvgResponseTimePerIssue($userId),
+            'paretoByType' => $this->tickets->getParetoByRequestType($userId),
+            'avgRatingPerEmployee' => $this->tickets->getAvgRatingPerEmployee($userId),
         ];
     }
 }

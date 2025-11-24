@@ -17,10 +17,12 @@ class DashboardController extends Controller
 
     public function index(Request $request)
     {
-        $data = $this->dash->getDashboardData();
+        $user = session('emp_data');
+        $data = $this->dash->getDashboardData($user);
 
         return Inertia::render('Dashboard', [
-            'dashboard' => $data
+            'dashboard' => $data,
+            'userRole' => $user['emp_system_role'] ?? 'support'
         ]);
     }
 }

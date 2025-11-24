@@ -91,12 +91,12 @@ class TicketRepository
         $year = date('Y');
         $prefix = "TKTSPRT-{$year}-";
 
-        $lastTicket = Ticket::where('ticket_id', 'like', "{$prefix}%")
-            ->orderBy('ticket_id', 'desc')
+        $lastTicket = Ticket::where('TICKET_ID', 'like', "{$prefix}%")
+            ->orderBy('TICKET_ID', 'desc')
             ->first();
 
         $newNumber = $lastTicket
-            ? ((int) substr($lastTicket->ticket_id, -3)) + 1
+            ? ((int) substr($lastTicket->TICKET_ID, -3)) + 1
             : 1;
 
         return $prefix . str_pad($newNumber, 3, '0', STR_PAD_LEFT);
@@ -115,7 +115,7 @@ class TicketRepository
 
     public function findTicketById(string $ticketId): ?Ticket
     {
-        return Ticket::where('ticket_id', $ticketId)->first();
+        return Ticket::where('TICKET_ID', $ticketId)->first();
     }
 
     public function updateTicket(Ticket $ticket, array $data): bool
@@ -171,7 +171,7 @@ class TicketRepository
         if (!empty($filters['search'])) {
             $search = $filters['search'];
             $query->where(function ($q) use ($search) {
-                $q->where('ticket_id', 'LIKE', "%{$search}%")
+                $q->where('TICKET_ID', 'LIKE', "%{$search}%")
                     ->orWhere('empname', 'LIKE', "%{$search}%")
                     ->orWhere('type_of_request', 'LIKE', "%{$search}%")
                     ->orWhere('request_option', 'LIKE', "%{$search}%")
@@ -385,7 +385,7 @@ class TicketRepository
     public function getTicketLogs(string $ticketId): Collection
     {
         $logs = TicketLogs::with('actor')
-            ->where('ticket_id', $ticketId)
+            ->where('TICKET_ID', $ticketId)
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -459,60 +459,237 @@ class TicketRepository
             ->where('EMPLOYID', $empId)
             ->value('JOB_TITLE');
     }
-    public function getTicketsHandledPerSupport(): array
+    // Response Time – raise to handled ticket
+    public function getResponseTime($userId = null): array
     {
-        $records = DB::table('ticketing_support_workflow')
-            ->select('ACTION_BY', DB::raw('COUNT(*) as total'))
-            ->whereIn('ACTION_TYPE', ['RESOLVE', 'CLOSE'])
-            ->groupBy('ACTION_BY')
+        $query = DB::table('ticketing_support as t')
+            ->join('ticketing_support_workflow as w', 't.TICKET_ID', '=', 'w.TICKET_ID')
+            ->select(
+                'w.ACTION_BY',
+                DB::raw('AVG(TIMESTAMPDIFF(MINUTE, t.CREATED_AT, w.ACTION_AT)) AS avg_response_minutes'),
+                DB::raw('MIN(TIMESTAMPDIFF(MINUTE, t.CREATED_AT, w.ACTION_AT)) AS min_response_minutes'),
+                DB::raw('MAX(TIMESTAMPDIFF(MINUTE, t.CREATED_AT, w.ACTION_AT)) AS max_response_minutes')
+            )
+            ->whereIn('w.ACTION_TYPE', ['HANDLE', 'RESOLVE']); // ONLY valid first response
+
+        if ($userId) {
+            $query->where('w.ACTION_BY', $userId);
+        }
+
+        $records = $query->groupBy('w.ACTION_BY')
+            ->orderBy('avg_response_minutes')
+            ->get()
+            ->toArray();
+
+        return array_map(function ($item) {
+            $user = $this->findUserById($item->ACTION_BY);
+            $item->emp_name = $user->empname ?? "Unknown User";
+            $item->emp_id = $user->emp_id ?? $item->ACTION_BY;
+            return $item;
+        }, $records);
+    }
+    // Tickets per day
+    public function getTicketsPerDay($userId = null): array
+    {
+        $query = DB::table('ticketing_support as t')
+            ->select(
+                DB::raw('DATE(t.created_at) as day'),
+                DB::raw('COUNT(DISTINCT t.TICKET_ID) as total')
+            );
+
+        if ($userId) {
+            $query->join('ticketing_support_workflow as w', 't.TICKET_ID', '=', 'w.TICKET_ID')
+                ->where('w.ACTION_BY', $userId);
+        }
+
+        return $query->groupBy('day')
+            ->orderBy('day')
+            ->get()
+            ->toArray();
+    }
+
+    // Number of tickets handled
+    public function getTicketsHandled($userId = null): array
+    {
+        $query = DB::table('ticketing_support_workflow')
+            ->select('ACTION_BY', DB::raw('COUNT(DISTINCT TICKET_ID) as total'))
+            ->where('ACTION_TYPE', 'RESOLVE');
+
+        if ($userId) {
+            $query->where('ACTION_BY', $userId);
+        }
+
+        $records = $query->groupBy('ACTION_BY')
             ->orderByDesc('total')
             ->get()
             ->toArray();
 
-        // Attach employee names
         return array_map(function ($item) {
             $user = $this->findUserById($item->ACTION_BY);
-
             $item->emp_name = $user->empname ?? "Unknown User";
             $item->emp_id = $user->emp_id ?? $item->ACTION_BY;
-
             return $item;
         }, $records);
     }
 
-    public function getAverageHandlingTime(): array
+
+    // Closure rate – no of tickets, no of unhandled tickets, avg response time
+    public function getClosureRate($userId = null): array
     {
-        $records = DB::table('ticketing_support as t')
-            ->join('ticketing_support_workflow as l', 't.ticket_id', '=', 'l.TICKET_ID')
+        // TOTAL TICKETS
+        $totalQuery = DB::table('ticketing_support as t');
+
+        if ($userId) {
+            // Count tickets handled by this user (ANY action)
+            $totalQuery->join('ticketing_support_workflow as w', 't.TICKET_ID', '=', 'w.TICKET_ID')
+                ->where('w.ACTION_BY', $userId);
+        }
+
+        $total = $totalQuery->distinct('t.TICKET_ID')->count('t.TICKET_ID');
+
+
+        // RESOLVED TICKETS
+        $resolvedQuery = DB::table('ticketing_support_workflow as w')
+            ->where('w.ACTION_TYPE', 'RESOLVE');
+
+        if ($userId) {
+            $resolvedQuery->where('w.ACTION_BY', $userId);
+        }
+
+        $resolved = $resolvedQuery->distinct('w.TICKET_ID')->count('w.TICKET_ID');
+
+
+        // UNHANDLED
+        $unhandled = $total - $resolved;
+
+        // CLOSURE RATE
+        $closureRate = $total > 0 ? round(($resolved / $total) * 100, 2) : 0;
+
+
+        // AVG RESPONSE TIME
+        $avgResponseQuery = DB::table('ticketing_support as t')
+            ->join('ticketing_support_workflow as w', 't.TICKET_ID', '=', 'w.TICKET_ID')
+            ->where('w.ACTION_TYPE', 'RESOLVE');
+
+        if ($userId) {
+            $avgResponseQuery->where('w.ACTION_BY', $userId);
+        }
+
+        $avgResponse = $avgResponseQuery->avg(DB::raw('TIMESTAMPDIFF(MINUTE, t.created_at, w.ACTION_AT)'));
+
+
+        return [
+            'total_tickets' => $total,
+            'resolved_tickets' => $resolved,
+            'unhandled_tickets' => $unhandled,
+            'closure_rate' => $closureRate,
+            'avg_response_time' => round($avgResponse ?? 0, 2),
+        ];
+    }
+
+
+    // Number of issues per request
+    public function getIssuesPerRequest($userId = null): array
+    {
+        $query = DB::table('ticketing_support as t')
             ->select(
-                'l.ACTION_BY',
-                DB::raw('AVG(TIMESTAMPDIFF(MINUTE, t.created_at, l.ACTION_AT)) as avg_minutes')
-            )
-            ->whereIn('l.ACTION_TYPE', ['RESOLVE', 'CLOSE'])
-            ->groupBy('l.ACTION_BY')
-            ->orderBy('avg_minutes')
+                't.TYPE_OF_REQUEST',
+                DB::raw('COUNT(DISTINCT t.TICKET_ID) as issue_count')
+            );
+
+        if ($userId) {
+            $query->join('ticketing_support_workflow as w', 't.TICKET_ID', '=', 'w.TICKET_ID')
+                ->where('w.ACTION_BY', $userId);
+        }
+
+        return $query->groupBy('t.TYPE_OF_REQUEST')
             ->get()
             ->toArray();
-
-        // Attach employee names
-        return array_map(function ($item) {
-            $user = $this->findUserById($item->ACTION_BY);
-
-            $item->emp_name = $user->empname ?? "Unknown User";
-            $item->emp_id = $user->emp_id ?? $item->ACTION_BY;
-
-            return $item;
-        }, $records);
     }
 
 
-    public function getTicketsPerDay(): array
+    // Avg response time per issue
+    public function getAvgResponseTimePerIssue($userId = null): array
     {
-        return DB::table('ticketing_support')
-            ->select(DB::raw('DATE(created_at) as day'), DB::raw('COUNT(*) as total'))
-            ->groupBy('day')
-            ->orderBy('day')
+        $query = DB::table('ticketing_support as t')
+            ->join('ticketing_support_workflow as w', 't.TICKET_ID', '=', 'w.TICKET_ID')
+            ->select(
+                't.TYPE_OF_REQUEST',
+                DB::raw('AVG(TIMESTAMPDIFF(MINUTE, t.CREATED_AT, w.ACTION_AT)) as avg_minutes'),
+                DB::raw('COUNT(DISTINCT t.TICKET_ID) as count')
+            )
+            ->where('w.ACTION_TYPE', 'RESOLVE');
+
+        if ($userId) {
+            $query->where('w.ACTION_BY', $userId);
+        }
+
+        return $query->groupBy('t.TYPE_OF_REQUEST')
+            ->orderBy('count', 'desc')
             ->get()
             ->toArray();
+    }
+
+
+    // Pareto chart based on type of request
+    public function getParetoByRequestType($userId = null): array
+    {
+        $query = DB::table('ticketing_support as t')
+            ->select(
+                't.TYPE_OF_REQUEST',
+                DB::raw('COUNT(DISTINCT t.TICKET_ID) as count')
+            );
+
+        if ($userId) {
+            $query->join('ticketing_support_workflow as w', 't.TICKET_ID', '=', 'w.TICKET_ID')
+                ->where('w.ACTION_BY', $userId);
+        }
+
+        $data = $query->groupBy('t.TYPE_OF_REQUEST')
+            ->orderByDesc('count')
+            ->get()
+            ->toArray();
+
+        $total = array_sum(array_column($data, 'count'));
+        $cumulative = 0;
+
+        return array_map(function ($item) use ($total, &$cumulative) {
+            $cumulative += $item->count;
+            $item->percentage = round(($item->count / $total) * 100, 2);
+            $item->cumulative_percentage = round(($cumulative / $total) * 100, 2);
+            return $item;
+        }, $data);
+    }
+
+
+    // Avg rating per employee
+    public function getAvgRatingPerEmployee($userId = null): array
+    {
+        $query = DB::table('ticketing_support as t')
+            ->join('ticketing_support_workflow as w', 't.TICKET_ID', '=', 'w.TICKET_ID')
+            ->select(
+                'w.ACTION_BY',
+                DB::raw('AVG(t.RATING) as avg_rating'),
+                DB::raw('COUNT(*) as total_ratings')
+            )
+            ->whereNotNull('t.RATING')
+            ->whereIn('w.ACTION_TYPE', ['RESOLVE']);
+
+        if ($userId) {
+            $query->where('w.ACTION_BY', $userId);
+        }
+
+        $records = $query->groupBy('w.ACTION_BY')
+            ->orderByDesc('avg_rating')
+            ->get()
+            ->toArray();
+
+        return array_map(function ($item) {
+            $user = $this->findUserById($item->ACTION_BY);
+            $item->emp_name = $user->empname ?? "Unknown User";
+            $item->emp_id = $user->emp_id ?? $item->ACTION_BY;
+            $item->avg_rating = round($item->avg_rating, 2);
+            return $item;
+        }, $records);
     }
 }

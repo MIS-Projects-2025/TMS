@@ -31,7 +31,13 @@ class AuthMiddleware
                 return redirect("http://192.168.2.221/authify/public/login?redirect={$redirectUrl}");
             }
 
-
+            $systemRole = null;
+            if (stripos($currentUser->emp_jobtitle, 'MIS Senior Supervisor') !== false) {
+                $systemRole = 'supervisor';
+            }
+            if (stripos($currentUser->emp_jobtitle, 'MIS Support Technician') !== false) {
+                $systemRole = 'support';
+            }
             // 3️⃣ Set session
             session(['emp_data' => [
                 'token' => $currentUser->token,
@@ -44,7 +50,7 @@ class AuthMiddleware
                 'emp_prodline' => $currentUser->emp_prodline,
                 'emp_station' => $currentUser->emp_station,
                 'generated_at' => $currentUser->generated_at,
-                // 'emp_system_role' => $systemRole,
+                'emp_system_role' => $systemRole ?? 'N/A',
             ]]);
 
             // 4️⃣ Notification user record
