@@ -4,12 +4,13 @@ import { usePage, router } from "@inertiajs/react";
 import { Table, Tag, Spin, Tooltip, Empty, message } from "antd";
 import {
     AppstoreOutlined,
-    ClockCircleOutlined,
+    PlayCircleOutlined,
     ExclamationCircleOutlined,
     SyncOutlined,
     CheckCircleOutlined,
     SearchOutlined,
     RollbackOutlined,
+    LoadingOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import TicketFormSkeleton from "@/Components/ticketing/TableSkeleton";
@@ -25,8 +26,11 @@ const TicketingTable = () => {
         tickets,
         pagination,
         statusCounts,
+        user_roles,
+        is_support_staff,
         filters: initialFilters,
     } = usePage().props;
+    console.log(usePage().props);
 
     const {
         loading,
@@ -48,7 +52,7 @@ const TicketingTable = () => {
     const [selectedTicket, setSelectedTicket] = useState(null);
     const [ticketLogs, setTicketLogs] = useState([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
-
+    const [processingTicket, setProcessingTicket] = useState(false);
     // Handle real-time ticket updates by refetching the table
     useEffect(() => {
         if (ticketUpdates.length === 0) return;
@@ -70,7 +74,60 @@ const TicketingTable = () => {
             preserveState: true,
         });
     }, [ticketUpdates, clearTicketUpdates]);
+    const autoProcessTicket = async (ticketId) => {
+        if (!is_support_staff) return false;
+        console.log("Auto Process");
 
+        setProcessingTicket(true);
+        try {
+            const payload = {
+                ticket_id: ticketId,
+                action: "ONPROCESS",
+                remarks: "Ticket automatically assigned to support staff",
+            };
+
+            const res = await axios.post(route("tickets.action"), payload);
+            if (res.data.success) {
+                message.success(`Ticket ${ticketId} is now being processed`);
+
+                // Refresh the table data immediately after successful auto-process
+                router.reload({
+                    only: ["tickets", "statusCounts", "pagination"],
+                    preserveScroll: true,
+                    preserveState: true,
+                    onSuccess: () => {
+                        console.log("Table refreshed after auto-process");
+                    },
+                });
+
+                return true;
+            } else {
+                message.warning(res.data.message);
+                return false;
+            }
+        } catch (err) {
+            console.error("Failed to auto-process ticket:", err);
+            message.error("Failed to assign ticket");
+            return false;
+        } finally {
+            setProcessingTicket(false);
+        }
+    };
+    const handleRowClick = async (record) => {
+        console.log("HandleROwClick", record);
+        // For support staff, auto-process the ticket if it's in Open status
+        if (is_support_staff && (record.STATUS == 1 || record.STATUS == 3)) {
+            const success = await autoProcessTicket(record.TICKET_ID);
+            if (!success) {
+                // If auto-processing fails, don't open the drawer
+                return;
+            }
+        }
+
+        setSelectedTicket(record);
+        setIsDrawerOpen(true);
+        fetchTicketHistory(record.TICKET_ID);
+    };
     const fetchTicketHistory = async (ticketId) => {
         setLoadingHistory(true);
         try {
@@ -236,7 +293,7 @@ const TicketingTable = () => {
             ) : (
                 <>
                     {/* Stat Cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4 mb-6">
                         <StatCard
                             title="All Tickets"
                             value={statusCounts?.all || 0}
@@ -250,10 +307,19 @@ const TicketingTable = () => {
                             title="Open / Ongoing"
                             value={statusCounts?.open || 0}
                             color="info"
-                            icon={ClockCircleOutlined}
+                            icon={PlayCircleOutlined}
                             onClick={() => handleStatusFilter("open")}
                             isActive={activeFilter === "open"}
                             filterType="open"
+                        />
+                        <StatCard
+                            title="On Process"
+                            value={statusCounts?.onProcess || 0}
+                            color="info"
+                            icon={LoadingOutlined}
+                            onClick={() => handleStatusFilter("onProcess")}
+                            isActive={activeFilter === "onProcess"}
+                            filterType="onProcess"
                         />
                         <StatCard
                             title="Critical"
@@ -322,7 +388,7 @@ const TicketingTable = () => {
                         </div>
 
                         {/* Table */}
-                        <Spin spinning={loading}>
+                        <Spin spinning={loading || processingTicket}>
                             {tickets && tickets.length > 0 ? (
                                 <Table
                                     columns={columns}
@@ -345,15 +411,16 @@ const TicketingTable = () => {
                                     className="bg-base-100 rounded-xl shadow-md"
                                     loading={loading}
                                     onRow={(record) => ({
-                                        onClick: () => {
-                                            setSelectedTicket(record);
-                                            setIsDrawerOpen(true);
-
-                                            fetchTicketHistory(
-                                                record.TICKET_ID
-                                            );
+                                        onClick: () => handleRowClick(record),
+                                        style: {
+                                            cursor: "pointer",
+                                            // Highlight open tickets for support staff
+                                            ...(is_support_staff &&
+                                            (record.STATUS === 1 ||
+                                                record.status === 1)
+                                                ? { backgroundColor: "#f0f9ff" }
+                                                : {}),
                                         },
-                                        style: { cursor: "pointer" },
                                     })}
                                 />
                             ) : (

@@ -20,14 +20,16 @@ export default function useTicketingTable(initialProps) {
     const statusMap = {
         all: "all",
         open: "open",
-        resolved: 3,
-        closed: 4,
+        onProcess: "onProcess",
+        resolved: "resolved",
+        closed: "closed",
         returned: "returned",
         critical: "critical",
     };
 
     const reverseStatusMap = {
         open: "open",
+        2: "onProcess",
         3: "resolved",
         4: "closed",
         returned: "returned",

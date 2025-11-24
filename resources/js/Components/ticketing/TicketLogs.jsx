@@ -180,6 +180,11 @@ const TicketLogs = ({ history = [], loading = false }) => {
                                         {item.REMARKS}
                                     </div>
                                 )}
+                                {item.ACTION_BY && (
+                                    <div className="text-xs text-base-500 mt-1">
+                                        By: {item.ACTION_BY}
+                                    </div>
+                                )}
                             </div>
                         ),
                     };

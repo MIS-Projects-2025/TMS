@@ -9,20 +9,22 @@ class TicketStatusService
 {
     public const STATUS_LABELS = [
         1 => 'Open',
-        2 => 'Ongoing',
-        3 => 'Resolved',
-        4 => 'Closed',
-        5 => 'Returned',
-        6 => 'Cancelled',
+        2 => 'On Process',
+        3 => 'Ongoing',
+        4 => 'Resolved',
+        5 => 'Closed',
+        6 => 'Returned',
+        7 => 'Cancelled',
     ];
 
     public const STATUS_COLORS = [
         1 => 'blue',
-        2 => 'cyan',
-        3 => 'yellow',
-        4 => 'green',
-        5 => 'gray',
-        6 => 'red',
+        2 => 'blue',
+        3 => 'cyan',
+        4 => 'yellow',
+        5 => 'green',
+        6 => 'gray',
+        7 => 'red',
     ];
 
     // Existing methods for Ticket object

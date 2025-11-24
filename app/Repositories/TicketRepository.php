@@ -9,6 +9,7 @@ use App\Models\Ticket;
 use App\Models\TicketLogs;
 use App\Models\TicketRemarksHistory;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class TicketRepository
 {
@@ -141,6 +142,31 @@ class TicketRepository
     ): LengthAwarePaginator {
         $query = Ticket::with('handler', 'closer');
 
+        // Apply user-based filtering for On Process tickets (applies to ALL queries)
+        $userId = $filters['userId'] ?? null;
+        if ($userId) {
+            $query->where(function ($q) use ($userId) {
+                $q->where('status', '!=', 2) // Include all non-OnProcess tickets
+                    ->orWhere(function ($q2) use ($userId) {
+                        // Only include OnProcess tickets if current user processed them (LATEST action)
+                        $q2->where('status', 2)
+                            ->whereExists(function ($q3) use ($userId) {
+                                $q3->select(DB::raw(1))
+                                    ->from('ticketing_support_workflow as w1')
+                                    ->whereColumn('w1.TICKET_ID', 'ticketing_support.TICKET_ID')
+                                    ->where('w1.ACTION_TYPE', 'ONPROCESS')
+                                    ->where('w1.ACTION_BY', $userId)
+                                    ->whereRaw('w1.ACTION_AT = (
+                                SELECT MAX(w2.ACTION_AT) 
+                                FROM ticketing_support_workflow w2 
+                                WHERE w2.TICKET_ID = w1.TICKET_ID 
+                                AND w2.ACTION_TYPE = "ONPROCESS"
+                            )');
+                            });
+                    });
+            });
+        }
+
         // Apply search filter
         if (!empty($filters['search'])) {
             $search = $filters['search'];
@@ -155,7 +181,27 @@ class TicketRepository
 
         // Apply status filter (basic data filtering only)
         if (!empty($filters['status']) && $filters['status'] !== 'all') {
-            if ($filters['status'] === 'critical') {
+            // Handle On Process status (both string 'onProcess' and numeric 2)
+            if ($filters['status'] === 'onProcess' || $filters['status'] == 2) {
+                $userId = $filters['userId'] ?? "";
+
+                $query->where('status', 2)
+                    ->whereExists(function ($q) use ($userId) {
+                        $q->select(DB::raw(1))
+                            ->from('ticketing_support_workflow as w1')
+                            ->whereColumn('w1.TICKET_ID', 'ticketing_support.TICKET_ID')
+                            ->where('w1.ACTION_TYPE', 'ONPROCESS')
+                            ->where('w1.ACTION_BY', $userId)
+                            ->whereRaw('w1.ACTION_AT = (
+                            SELECT MAX(w2.ACTION_AT) 
+                            FROM ticketing_support_workflow w2 
+                            WHERE w2.TICKET_ID = w1.TICKET_ID 
+                            AND w2.ACTION_TYPE = "ONPROCESS"
+                        )');
+                    });
+            }
+            // Handle other status filters
+            elseif ($filters['status'] === 'critical') {
                 $criticalTime = Carbon::now()->subMinutes(30);
                 $query->where('status', 1)->where('created_at', '<=', $criticalTime);
             } elseif ($filters['status'] === 'open') {
@@ -165,14 +211,15 @@ class TicketRepository
                         $q2->where('status', 1)
                             ->where('created_at', '>', $criticalTime);
                     })
-                        ->orWhere('status', 2); // Ongoing, all dates
+                        ->orWhere('status', 3);
                 });
             } elseif (($filters['status'] === 'returned')) {
-                $query->whereIn('status', [5, 6]);
+                $query->whereIn('status', [6, 7]);
             } elseif (in_array($filters['status'], ['resolved', 'closed'])) {
-                $statusMap = ['resolved' => 3, 'closed' => 4,];
+                $statusMap = ['resolved' => 4, 'closed' => 5,];
                 $query->where('status', $statusMap[$filters['status']]);
             } elseif (is_numeric($filters['status'])) {
+                // For other numeric statuses (not 2)
                 $query->where('status', $filters['status']);
             }
         }
@@ -197,7 +244,6 @@ class TicketRepository
         return $query->orderBy($filters['sortField'] ?? 'created_at', $filters['sortOrder'] ?? 'desc')
             ->paginate($filters['pageSize'] ?? 10, ['*'], 'page', $filters['page'] ?? 1);
     }
-
     /**
      * Get ticket counts by status (basic counting only)
      */
@@ -233,13 +279,14 @@ class TicketRepository
                     $q2->where('status', 1)
                         ->where('created_at', '>', $criticalTime);
                 })
-                    ->orWhere('status', 2);
+                    ->orWhere('status', 3);
             })->count(),
 
             'critical' => $criticalQuery->where('status', 1)->where('created_at', '<=', $criticalTime)->count(),
-            'resolved' => $baseQuery->clone()->where('status', 3)->count(),
-            'closed' => $baseQuery->clone()->where('status', 4)->count(),
-            'returned' => $baseQuery->clone()->whereIn('status', [5, 6])->count(),
+            'onProcess' => $baseQuery->clone()->where('status', 2)->count(),
+            'resolved' => $baseQuery->clone()->where('status', 4)->count(),
+            'closed' => $baseQuery->clone()->where('status', 5)->count(),
+            'returned' => $baseQuery->clone()->whereIn('status', [6, 7])->count(),
         ];
     }
 
@@ -277,7 +324,7 @@ class TicketRepository
             ->where('created_at', '<=', $criticalTime)
             ->get();
     }
-    public function getStatusCounts(array $whereConditions = []): array
+    public function getStatusCounts(array $whereConditions = [], array $filters = []): array
     {
         $criticalTime = Carbon::now()->subMinutes(30);
 
@@ -286,8 +333,34 @@ class TicketRepository
             $baseQuery->where(...$condition);
         }
 
+        // Apply user-based filtering to ALL queries
+        $userId = $filters['userId'] ?? null;
+        if ($userId) {
+            $baseQuery->where(function ($q) use ($userId) {
+                $q->where('status', '!=', 2) // Include all non-OnProcess tickets
+                    ->orWhere(function ($q2) use ($userId) {
+                        // Only include OnProcess tickets if current user processed them (LATEST action)
+                        $q2->where('status', 2)
+                            ->whereExists(function ($q3) use ($userId) {
+                                $q3->select(DB::raw(1))
+                                    ->from('ticketing_support_workflow as w1')
+                                    ->whereColumn('w1.TICKET_ID', 'ticketing_support.TICKET_ID')
+                                    ->where('w1.ACTION_TYPE', 'ONPROCESS')
+                                    ->where('w1.ACTION_BY', $userId)
+                                    ->whereRaw('w1.ACTION_AT = (
+                                SELECT MAX(w2.ACTION_AT) 
+                                FROM ticketing_support_workflow w2 
+                                WHERE w2.TICKET_ID = w1.TICKET_ID 
+                                AND w2.ACTION_TYPE = "ONPROCESS"
+                            )');
+                            });
+                    });
+            });
+        }
+
         $openQuery = clone $baseQuery;
         $criticalQuery = clone $baseQuery;
+        $onProcessQuery = clone $baseQuery;
 
         return [
             'all' => $baseQuery->count(),
@@ -296,12 +369,13 @@ class TicketRepository
                     $q2->where('status', 1)
                         ->where('created_at', '>', $criticalTime);
                 })
-                    ->orWhere('status', 2);
+                    ->orWhere('status', 3);
             })->count(),
             'critical' => $criticalQuery->where('status', 1)->where('created_at', '<=', $criticalTime)->count(),
-            'resolved' => $baseQuery->clone()->where('status', 3)->count(),
-            'closed' => $baseQuery->clone()->where('status', 4)->count(),
-            'returned' => $baseQuery->clone()->whereIn('status', [5, 6])->count(),
+            'onProcess' => $onProcessQuery->where('status', 2)->count(),
+            'resolved' => $baseQuery->clone()->where('status', 4)->count(),
+            'closed' => $baseQuery->clone()->where('status', 5)->count(),
+            'returned' => $baseQuery->clone()->whereIn('status', [6, 7])->count(),
         ];
     }
 

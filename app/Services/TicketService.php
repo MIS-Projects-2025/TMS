@@ -105,10 +105,12 @@ class TicketService
     {
         // Business logic: Apply role-based access control
         $whereConditions = $this->buildRoleBasedConditions($employeeData['emp_id'], $userRoles);
+        $filters['userId'] = $employeeData['emp_id'];
 
         // Get data from repository
         $tickets = $this->ticketRepository->getTicketsWithFilters($filters, $whereConditions);
-        $statusCounts = $this->ticketRepository->getStatusCounts($whereConditions);
+
+        $statusCounts = $this->ticketRepository->getStatusCounts($whereConditions, $filters);
 
         $ticketsData = $tickets->getCollection()->map(function ($ticket) use ($employeeData, $userRoles) {
             $status = $ticket->STATUS ?? $ticket->status;
@@ -126,7 +128,6 @@ class TicketService
             return $ticket;
         });
 
-
         return [
             'tickets' => $ticketsData->toArray(),
             'pagination' => [
@@ -137,6 +138,9 @@ class TicketService
             ],
             'statusCounts' => $statusCounts,
             'filters' => $filters,
+            'user_roles' => $userRoles, // Include user roles in response
+            'is_support_staff' => in_array('MIS_SUPERVISOR', $userRoles) ||
+                in_array('SUPPORT_TECHNICIAN', $userRoles), // Add this flag
         ];
     }
 
@@ -148,7 +152,7 @@ class TicketService
         ?int $rating = null
     ): bool {
         $actionType = strtoupper($actionType);
-        if (!in_array($actionType, ['RESOLVE', 'CLOSE', 'RETURN', 'ONGOING', 'CANCEL'])) {
+        if (!in_array($actionType, ['RESOLVE', 'CLOSE', 'RETURN', 'ONGOING', 'CANCEL', 'ONPROCESS'])) {
             throw new \InvalidArgumentException('Invalid action type');
         }
 
@@ -160,11 +164,12 @@ class TicketService
             $oldStatus = $ticket->status;
 
             $statusMap = [
-                'ONGOING' => 2,
-                'RESOLVE' => 3,
-                'CLOSE' => 4,
-                'RETURN' => 5,
-                'CANCEL' => 6
+                'ONPROCESS' => 2,
+                'ONGOING' => 3,
+                'RESOLVE' => 4,
+                'CLOSE' => 5,
+                'RETURN' => 6,
+                'CANCEL' => 7
             ];
             $newStatus = $statusMap[$actionType];
 
@@ -239,7 +244,7 @@ class TicketService
             }
         }
 
-        // ONGOING (2)
+        // ONPROCESS (2)
         if ($status == 2) {
             if ($isSupport) {
                 $actions = ['Ongoing', 'Resolve',];
@@ -247,9 +252,17 @@ class TicketService
                 $actions = ['View'];
             }
         }
-
-        // RESOLVED (3)
+        // ONGOING (3)
         if ($status == 3) {
+            if ($isSupport) {
+                $actions = ['Ongoing', 'Resolve',];
+            } else {
+                $actions = ['View'];
+            }
+        }
+
+        // RESOLVED (4)
+        if ($status == 4) {
             if ($isRequestor) {
                 $actions = ['Close', 'Return'];
             } else {
@@ -257,8 +270,8 @@ class TicketService
             }
         }
 
-        // RETURNED (5)
-        if ($status == 5) {
+        // RETURNED (6)
+        if ($status == 6) {
             if ($isSupport) {
                 $actions = ['Ongoing', 'Resolve',];
             } else {

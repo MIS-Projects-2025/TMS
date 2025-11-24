@@ -81,6 +81,7 @@ class NotificationService
                 // MIS support except actor
                 $supports = $this->userRepo->getMISSupportUsers();
                 return array_filter($supports, fn($u) => $u->emp_id !== $actor['emp_id']);
+            case 'ONPROCESS':
             case 'RESOLVE':
                 // Notify requestor
                 $requestor = $this->userRepo->findUserById($ticket->employid);

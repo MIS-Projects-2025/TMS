@@ -23,7 +23,6 @@ export default function AuthenticatedLayout({ children }) {
                     </main>
                 </div>
             </div>
-            //{" "}
         </NotificationProvider>
     );
 }

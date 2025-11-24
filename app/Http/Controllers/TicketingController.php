@@ -106,6 +106,8 @@ class TicketingController extends Controller
             'pagination' => $result['pagination'],
             'statusCounts' => $result['statusCounts'],
             'filters' => $result['filters'],
+            'user_roles' => $result['user_roles'],
+            'is_support_staff' => $result['is_support_staff'],
         ])->with('flash', ['message' => 'Tickets loaded successfully']);
     }
 
@@ -157,7 +159,7 @@ class TicketingController extends Controller
 
         $request->validate([
             'ticket_id' => 'required|string',
-            'action' => 'required|string|in:RESOLVE,CLOSE,RETURN,ONGOING,CANCEL',
+            'action' => 'required|string|in:RESOLVE,CLOSE,RETURN,ONGOING,CANCEL,ONPROCESS',
             'remarks' => 'nullable|string',
             'rating' => 'nullable|integer|min:1|max:5',
         ]);
