@@ -2,16 +2,7 @@ import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import React, { useState, useEffect } from "react";
 import { usePage, router } from "@inertiajs/react";
 import { Table, Tag, Spin, Tooltip, Empty, message } from "antd";
-import {
-    AppstoreOutlined,
-    PlayCircleOutlined,
-    ExclamationCircleOutlined,
-    SyncOutlined,
-    CheckCircleOutlined,
-    SearchOutlined,
-    RollbackOutlined,
-    LoadingOutlined,
-} from "@ant-design/icons";
+import { SearchOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import TicketFormSkeleton from "@/Components/ticketing/TableSkeleton";
 import StatCard from "@/Components/ticketing/StatCard";
@@ -19,7 +10,14 @@ import useTicketingTable from "@/Hooks/useTicketTable";
 import TicketDetailsDrawer from "@/Components/ticketing/TicketDetailsDrawer";
 import DurationCell from "@/Components/ticketing/DurationCell";
 import { useNotifications } from "@/Context/NotificationContext";
-
+import {
+    PlayCircle,
+    MonitorCog,
+    AlertCircle,
+    TicketCheck,
+    ArrowRightLeft,
+    TicketPercent,
+} from "lucide-react";
 const TicketingTable = () => {
     const {
         emp_data,
@@ -53,6 +51,8 @@ const TicketingTable = () => {
     const [ticketLogs, setTicketLogs] = useState([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [processingTicket, setProcessingTicket] = useState(false);
+
+    const isMISSupervisor = user_roles?.includes("MIS_SUPERVISOR");
     // Handle real-time ticket updates by refetching the table
     useEffect(() => {
         if (ticketUpdates.length === 0) return;
@@ -255,6 +255,29 @@ const TicketingTable = () => {
                 return tag;
             },
         },
+
+        ...(isMISSupervisor &&
+        (activeFilter === "all" ||
+            activeFilter === "resolved" ||
+            activeFilter === "returned" ||
+            activeFilter === "closed")
+            ? [
+                  {
+                      title: "Handled By",
+                      dataIndex: "handled_by_name",
+                      key: "handled_by_name",
+                      width: 120,
+                      sorter: true,
+                      render: (handledBy, record) => (
+                          <Tooltip title={handledBy || "Not yet assigned"}>
+                              <div className="flex items-center gap-1">
+                                  {handledBy || "-"}
+                              </div>
+                          </Tooltip>
+                      ),
+                  },
+              ]
+            : []),
         {
             title: "Created At",
             dataIndex: "CREATED_AT",
@@ -298,7 +321,7 @@ const TicketingTable = () => {
                             title="All Tickets"
                             value={statusCounts?.all || 0}
                             color="neutral"
-                            icon={AppstoreOutlined}
+                            icon={TicketPercent}
                             onClick={() => handleStatusFilter("all")}
                             isActive={activeFilter === "all"}
                             filterType="all"
@@ -307,7 +330,7 @@ const TicketingTable = () => {
                             title="Open / Ongoing"
                             value={statusCounts?.open || 0}
                             color="info"
-                            icon={PlayCircleOutlined}
+                            icon={PlayCircle}
                             onClick={() => handleStatusFilter("open")}
                             isActive={activeFilter === "open"}
                             filterType="open"
@@ -316,7 +339,7 @@ const TicketingTable = () => {
                             title="On Process"
                             value={statusCounts?.onProcess || 0}
                             color="info"
-                            icon={LoadingOutlined}
+                            icon={MonitorCog}
                             onClick={() => handleStatusFilter("onProcess")}
                             isActive={activeFilter === "onProcess"}
                             filterType="onProcess"
@@ -325,7 +348,7 @@ const TicketingTable = () => {
                             title="Critical"
                             value={statusCounts?.critical || 0}
                             color="secondary"
-                            icon={ExclamationCircleOutlined}
+                            icon={AlertCircle}
                             onClick={() => handleStatusFilter("critical")}
                             isActive={activeFilter === "critical"}
                             filterType="critical"
@@ -335,7 +358,7 @@ const TicketingTable = () => {
                             title="Resolved"
                             value={statusCounts?.resolved || 0}
                             color="warning"
-                            icon={SyncOutlined}
+                            icon={TicketCheck}
                             onClick={() => handleStatusFilter("resolved")}
                             isActive={activeFilter === "resolved"}
                             filterType="resolved"
@@ -344,7 +367,7 @@ const TicketingTable = () => {
                             title="Returned / Cancelled"
                             value={statusCounts?.returned || 0}
                             color="error"
-                            icon={RollbackOutlined}
+                            icon={ArrowRightLeft}
                             onClick={() => handleStatusFilter("returned")}
                             isActive={activeFilter === "returned"}
                             filterType="returned"
@@ -353,7 +376,7 @@ const TicketingTable = () => {
                             title="Closed"
                             value={statusCounts?.closed || 0}
                             color="success"
-                            icon={CheckCircleOutlined}
+                            icon={TicketCheck}
                             onClick={() => handleStatusFilter("closed")}
                             isActive={activeFilter === "closed"}
                             filterType="closed"

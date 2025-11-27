@@ -32,6 +32,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 export default function Dashboard() {
     const { dashboard, userRole } = usePage().props;
+    console.log(dashboard);
 
     /* ----------------------------- DATA CLEANING ----------------------------- */
     const responseTimeData = dashboard.responseTime.map((i) => ({
@@ -56,7 +57,11 @@ export default function Dashboard() {
         avg: Number(i.avg_minutes),
         count: Number(i.count),
     }));
-
+    const optionResponseData = dashboard.optionsPerRequest.map((i) => ({
+        option: i.REQUEST_OPTION || i.issue_type,
+        avg: Number(i.avg_minutes),
+        count: Number(i.count),
+    }));
     const paretoData = dashboard.paretoByType.map((i) => ({
         type: i.TYPE_OF_REQUEST || i.request_type,
         count: Number(i.count),
@@ -189,6 +194,19 @@ export default function Dashboard() {
                             <BarChart data={issueResponseData}>
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="issue" />
+                                <YAxis />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Bar dataKey="avg" fill="#FF6F61" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </ChartCard>
+                    {/* Avg Response Time Per Option */}
+                    <ChartCard title="Average Response Time Per Request Option">
+                        <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={optionResponseData}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="option" />{" "}
+                                {/* <-- changed from "issue" to "option" */}
                                 <YAxis />
                                 <Tooltip content={<CustomTooltip />} />
                                 <Bar dataKey="avg" fill="#FF6F61" />

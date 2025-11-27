@@ -144,9 +144,14 @@ class TicketRepository
 
         // Apply user-based filtering for On Process tickets (applies to ALL queries)
         $userId = $filters['userId'] ?? null;
+        $userRoles = $filters['userRoles'] ?? [];
+
         if ($userId) {
-            $query->where(function ($q) use ($userId) {
-                $q->where('status', '!=', 2) // Include all non-OnProcess tickets
+            $query->where(function ($q) use ($userId, $userRoles) {
+                $q->where(function ($q2) use ($userId) {
+                    // Include all non-OnProcess tickets (will be further filtered later)
+                    $q2->where('status', '!=', 2);
+                })
                     ->orWhere(function ($q2) use ($userId) {
                         // Only include OnProcess tickets if current user processed them (LATEST action)
                         $q2->where('status', 2)
@@ -165,6 +170,20 @@ class TicketRepository
                             });
                     });
             });
+
+            // Additional filtering for Support Technicians on closed statuses
+            // This applies to ALL views including "all tickets"
+            if (in_array('SUPPORT_TECHNICIAN', $userRoles) && !in_array('MIS_SUPERVISOR', $userRoles)) {
+                $query->where(function ($q) use ($userId) {
+                    // For statuses 4,5,6,7 (resolved, closed, returned, cancel), only show if they handled it
+                    $q->where(function ($q2) use ($userId) {
+                        $q2->whereIn('status', [4, 5, 6, 7])
+                            ->where('HANDLED_BY', $userId);
+                    })
+                        // For all other statuses, no restriction
+                        ->orWhereNotIn('status', [4, 5, 6, 7]);
+                });
+            }
         }
 
         // Apply search filter
@@ -335,6 +354,8 @@ class TicketRepository
 
         // Apply user-based filtering to ALL queries
         $userId = $filters['userId'] ?? null;
+        $userRoles = $filters['userRoles'] ?? [];
+
         if ($userId) {
             $baseQuery->where(function ($q) use ($userId) {
                 $q->where('status', '!=', 2) // Include all non-OnProcess tickets
@@ -348,14 +369,27 @@ class TicketRepository
                                     ->where('w1.ACTION_TYPE', 'ONPROCESS')
                                     ->where('w1.ACTION_BY', $userId)
                                     ->whereRaw('w1.ACTION_AT = (
-                                SELECT MAX(w2.ACTION_AT) 
-                                FROM ticketing_support_workflow w2 
-                                WHERE w2.TICKET_ID = w1.TICKET_ID 
-                                AND w2.ACTION_TYPE = "ONPROCESS"
-                            )');
+                                    SELECT MAX(w2.ACTION_AT) 
+                                    FROM ticketing_support_workflow w2 
+                                    WHERE w2.TICKET_ID = w1.TICKET_ID 
+                                    AND w2.ACTION_TYPE = "ONPROCESS"
+                                )');
                             });
                     });
             });
+
+            // Additional filtering for Support Technicians on closed statuses
+            if (in_array('SUPPORT_TECHNICIAN', $userRoles) && !in_array('MIS_SUPERVISOR', $userRoles)) {
+                $baseQuery->where(function ($q) use ($userId) {
+                    // For statuses 4,5,6,7 (resolved, closed, returned, cancel), only show if they handled it
+                    $q->where(function ($q2) use ($userId) {
+                        $q2->whereIn('status', [4, 5, 6, 7])
+                            ->where('HANDLED_BY', $userId);
+                    })
+                        // For all other statuses, no restriction
+                        ->orWhereNotIn('status', [4, 5, 6, 7]);
+                });
+            }
         }
 
         $openQuery = clone $baseQuery;
@@ -607,6 +641,28 @@ class TicketRepository
             ->toArray();
     }
 
+
+
+    public function getOptionsPerRequest($userId = null): array
+    {
+        $query = DB::table('ticketing_support as t')
+            ->join('ticketing_support_workflow as w', 't.TICKET_ID', '=', 'w.TICKET_ID')
+            ->select(
+                't.REQUEST_OPTION',
+                DB::raw('AVG(TIMESTAMPDIFF(MINUTE, t.CREATED_AT, w.ACTION_AT)) as avg_minutes'),
+                DB::raw('COUNT(DISTINCT t.TICKET_ID) as count')
+            )
+            ->where('w.ACTION_TYPE', 'RESOLVE');
+
+        if ($userId) {
+            $query->where('w.ACTION_BY', $userId);
+        }
+
+        return $query->groupBy('t.REQUEST_OPTION')
+            ->orderBy('count', 'desc')
+            ->get()
+            ->toArray();
+    }
 
     // Avg response time per issue
     public function getAvgResponseTimePerIssue($userId = null): array

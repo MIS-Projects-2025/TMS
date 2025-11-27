@@ -25,6 +25,7 @@ class DashboardService
             'ticketsHandled' => $this->tickets->getTicketsHandled($userId),
             'closureRate' => $this->tickets->getClosureRate($userId),
             'issuesPerRequest' => $this->tickets->getIssuesPerRequest($userId),
+            'optionsPerRequest' => $this->tickets->getOptionsPerRequest($userId),
             'avgResponseTimePerIssue' => $this->tickets->getAvgResponseTimePerIssue($userId),
             'paretoByType' => $this->tickets->getParetoByRequestType($userId),
             'avgRatingPerEmployee' => $this->tickets->getAvgRatingPerEmployee($userId),

@@ -4,8 +4,8 @@ const colorMap = {
     error: "text-red-600 border-red-600",
     success: "text-green-600 border-green-600",
     warning: "text-yellow-500 border-yellow-500",
-    neutral: "text-gray-600 border-gray-600", // Added for "All Tickets"
-    secondary: "text-orange-600 border-orange-600", // Added for "Critical"
+    neutral: "neural-content",
+    secondary: "text-orange-600 border-orange-600",
 };
 
 export default function StatCard({

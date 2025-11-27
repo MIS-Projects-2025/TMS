@@ -106,6 +106,7 @@ class TicketService
         // Business logic: Apply role-based access control
         $whereConditions = $this->buildRoleBasedConditions($employeeData['emp_id'], $userRoles);
         $filters['userId'] = $employeeData['emp_id'];
+        $filters['userRoles'] = $userRoles; // Pass user roles to repository
 
         // Get data from repository
         $tickets = $this->ticketRepository->getTicketsWithFilters($filters, $whereConditions);
