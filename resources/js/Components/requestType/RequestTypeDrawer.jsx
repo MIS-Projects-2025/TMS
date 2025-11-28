@@ -96,7 +96,7 @@ const RequestTypeDrawer = ({
             { min: 2, message: 'Name must be at least 2 characters' },
           ]}
         >
-          <Input size="large" placeholder="Enter request type name" />
+          <Input size="large" placeholder="Enter request type name" style={{ borderRadius: 6 }} />
         </Form.Item>
 
         <Form.Item
@@ -104,7 +104,7 @@ const RequestTypeDrawer = ({
           label="Category"
           rules={[{ required: true, message: 'Please select a category' }]}
         >
-          <Input size="large" placeholder="Enter Category" />
+          <Input size="large" placeholder="Enter Category" style={{ borderRadius: 6 }} />
         </Form.Item>
 
         <Form.Item

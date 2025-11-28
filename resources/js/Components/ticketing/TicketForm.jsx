@@ -149,7 +149,7 @@ const TicketForm = ({
                         },
                     ]}
                 >
-                    <Input size="large" placeholder="Enter details..." />
+                    <Input size="large" placeholder="Enter details..." style={{ borderRadius: 6 }} />
                 </Form.Item>
             )}
 
