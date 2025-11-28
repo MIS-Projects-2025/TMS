@@ -13,6 +13,7 @@ class TicketRequestTypeRepository
     public function getAllGrouped(): array
     {
         $types = DB::table('ticket_request_types')
+            ->whereNot('category', 'Support Services')
             ->orderBy('category')
             ->orderBy('name')
             ->get();
@@ -28,13 +29,36 @@ class TicketRequestTypeRepository
 
         return $grouped;
     }
+    public function getMisRequestType(): array
+    {
+        $types = DB::table('ticket_request_types')
+            ->where('category', 'Support Services')
+            ->orderBy('category')
+            ->orderBy('name')
+            ->get();
 
+        // Group by category
+        $grouped = [];
+        foreach ($types as $type) {
+            $grouped[$type->category][] = [
+                'name' => $type->name,
+                'has_data' => (bool) $type->has_data,
+            ];
+        }
+
+        return $grouped;
+    }
     /**
      * Get request types with their options for form display
      */
-    public function getRequestTypesForForm(): array
+    public function getRequestTypesForForm($userRoles): array
     {
-        $grouped = $this->getAllGrouped();
+        // If the user has MIS roles, get only MIS request types
+        if (in_array('MIS_SUPERVISOR', $userRoles) || in_array('SUPPORT_TECHNICIAN', $userRoles)) {
+            $grouped = $this->getMisRequestType(); // note: typo in your function name
+        } else {
+            $grouped = $this->getAllGrouped();
+        }
 
         // Transform to the format expected by the frontend
         $formatted = [];

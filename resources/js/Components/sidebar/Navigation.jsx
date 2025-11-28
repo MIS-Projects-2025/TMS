@@ -1,22 +1,22 @@
-import { useEffect, useState } from "react";
-import axios from "axios";
-
-import SidebarLink from "@/Components/sidebar/SidebarLink";
 import { usePage } from "@inertiajs/react";
 import { LayoutDashboard, Tickets, TicketPlus } from "lucide-react";
-import { Table } from "antd";
+import SidebarLink from "@/Components/sidebar/SidebarLink";
 
 export default function NavLinks({ isSidebarOpen }) {
     const { emp_data } = usePage().props;
-    console.log(emp_data.emp_system_role);
+    const roles = emp_data.emp_system_roles || [];
+
+    // Check if user has dashboard access
+    const canAccessDashboard = roles.some(role =>
+        ["support", "supervisor", "Senior Approver"].includes(role)
+    );
 
     return (
         <nav
             className="flex flex-col flex-grow space-y-1 overflow-y-auto"
             style={{ scrollbarWidth: "none" }}
         >
-            {(emp_data.emp_system_role === "support" ||
-                emp_data.emp_system_role === "supervisor") && (
+            {canAccessDashboard && (
                 <SidebarLink
                     href={route("dashboard")}
                     label="Dashboard"

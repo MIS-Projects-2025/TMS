@@ -30,7 +30,9 @@ class TicketingController extends Controller
      */
     public function showTicketForm(): Response
     {
-        $formData = $this->ticketService->getTicketFormData();
+        $empData = session('emp_data');
+        $userRoles = $this->userRoleService->getUserAccountTypes($empData);
+        $formData = $this->ticketService->getTicketFormData($userRoles);
         return Inertia::render('Ticketing/Create', $formData);
     }
 
@@ -87,7 +89,7 @@ class TicketingController extends Controller
         $empData = session('emp_data');
         if (!$empData) return redirect()->route('login');
 
-        $userRoles = $this->userRoleService->getUserAccountType($empData);
+        $userRoles = $this->userRoleService->getUserAccountTypes($empData);
 
         $filters = [
             'page' => (int) $request->input('page', 1),
@@ -121,7 +123,7 @@ class TicketingController extends Controller
             ], 401);
         }
 
-        $userRoles = $this->userRoleService->getUserAccountType($empData);
+        $userRoles = $this->userRoleService->getUserAccountTypes($empData);
 
         try {
             $ticketDetails = $this->ticketService->getTicketDetails($ticketId, $empData, $userRoles);

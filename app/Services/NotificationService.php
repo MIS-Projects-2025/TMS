@@ -27,6 +27,12 @@ class NotificationService
         Log::info("=== NOTIFYING TICKET ACTION: {$ticket->TICKET_ID}, ACTION: {$action} ===");
 
         try {
+            // Check if this is a Support Service type request with status 1-3
+            if ($this->shouldSkipNotification($ticket, $action)) {
+                Log::info("Skipping notification for Support Service ticket {$ticket->TICKET_ID}, status: {$ticket->status}");
+                return ['success' => 0, 'failed' => 0, 'total' => 0, 'skipped' => true];
+            }
+
             // Determine recipients based on action type
             $recipients = $this->getRecipients($ticket, $actor, $action);
 
@@ -61,6 +67,31 @@ class NotificationService
             ]);
             return ['success' => 0, 'failed' => 0, 'total' => 0, 'error' => $e->getMessage()];
         }
+    }
+
+    /**
+     * Check if notification should be skipped for Support Service requests
+     */
+    private function shouldSkipNotification($ticket, string $action): bool
+    {
+        // Check if this is a Support Service type request
+        $requestType = strtolower($ticket->request_type ?? '');
+        $isSupportService = str_contains($requestType, 'support service');
+
+        if (!$isSupportService) {
+            return false;
+        }
+
+        // For Support Service, skip notifications for status 1-3
+        $status = $ticket->status ?? 0;
+        $action = strtoupper($action);
+
+        // Skip if status is 1, 2, or 3 (and not RESOLVE, CLOSE, or RETURN actions)
+        if (in_array($status, [1, 2, 3]) && !in_array($action, ['RESOLVE', 'CLOSE', 'RETURN'])) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -151,6 +182,50 @@ class NotificationService
     {
         $action = strtoupper($action);
 
+        // Check if this is a Support Service type request
+        $isSupportService = isset($ticket->type_of_request) &&
+            str_contains(strtolower(trim($ticket->type_of_request)), 'support service');
+
+
+        // Special handling for Support Service requests
+        if ($isSupportService) {
+            switch ($action) {
+                case 'RESOLVE':
+                    // Notify senior approvers
+                    $seniorApproverIds = $this->userRepo->getSeniorApproverIds();
+                    $seniorApprovers = [];
+                    foreach ($seniorApproverIds as $approverId) {
+                        $user = $this->userRepo->findUserById($approverId);
+                        if ($user) {
+                            $seniorApprovers[] = $user;
+                        }
+                    }
+                    Log::info("Support Service RESOLVE - Notifying senior approvers", [
+                        'ticket_id' => $ticket->TICKET_ID,
+                        'senior_approver_count' => count($seniorApprovers)
+                    ]);
+                    return $seniorApprovers;
+
+                case 'CLOSE':
+                case 'RETURN':
+                    // Notify requestor only
+                    $requestor = $this->userRepo->findUserById($ticket->employid);
+                    Log::info("Support Service {$action} - Notifying requestor", [
+                        'ticket_id' => $ticket->TICKET_ID,
+                        'requestor_id' => $ticket->employid
+                    ]);
+                    return $requestor ? [$requestor] : [];
+
+                default:
+                    // For other actions in Support Service, no notifications
+                    Log::info("Support Service {$action} - No notifications", [
+                        'ticket_id' => $ticket->TICKET_ID
+                    ]);
+                    return [];
+            }
+        }
+
+        // Default notification logic for non-Support Service requests
         switch ($action) {
             case 'CREATED':
                 // New ticket - notify all MIS support except the creator
@@ -206,13 +281,13 @@ class NotificationService
     private function getActionRequired(string $action): ?string
     {
         return match (strtoupper($action)) {
-            'CREATED' => 'REVIEW',      // Need to review new ticket
-            'ONGOING' => 'ASSESS',      // Need to assess ongoing ticket
-            'ONPROCESS' => 'WAIT',      // No action - just FYI that work started
-            'RESOLVE' => 'CLOSE',       // Need to close resolved ticket
-            'RETURN' => 'REASSESS',     // Need to reassess returned ticket
-            'CANCEL' => 'INFO',         // No action - just informational
-            'CLOSE' => 'CLOSED',        // No action - ticket closed
+            'CREATED' => 'REVIEW',
+            'ONGOING' => 'ASSESS',
+            'ONPROCESS' => 'WAIT',
+            'RESOLVE' => 'CLOSE',
+            'RETURN' => 'REASSESS',
+            'CANCEL' => 'INFO',
+            'CLOSE' => 'CLOSED',
             default => null,
         };
     }
@@ -244,16 +319,4 @@ class NotificationService
             return 'Unknown';
         }
     }
-
-    /**
-     * Add more specialized notification methods below
-     * These can all use the sendNotifications() core method
-     */
-
-    // Example: Future method for approval notifications
-    // public function notifyApproval($ticket, $approver, $approvalType) {
-    //     $recipients = $this->getApprovalRecipients($ticket, $approvalType);
-    //     $notification = new TicketApprovalNotification(...);
-    //     return $this->sendNotifications($recipients, $notification, 'APPROVE', 'APPROVAL');
-    // }
 }

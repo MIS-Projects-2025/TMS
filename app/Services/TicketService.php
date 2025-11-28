@@ -33,10 +33,10 @@ class TicketService
     }
 
 
-    public function getTicketFormData(): array
+    public function getTicketFormData($userRoles): array
     {
         return [
-            'request_types' => $this->requestTypeRepository->getRequestTypesForForm(),
+            'request_types' => $this->requestTypeRepository->getRequestTypesForForm($userRoles),
             'hardware_options' => [
                 'Desktop' => $this->ticketRepository->getDesktopNames(),
                 'Laptop' => $this->ticketRepository->getLaptopNames(),
@@ -112,7 +112,7 @@ class TicketService
         $tickets = $this->ticketRepository->getTicketsWithFilters($filters, $whereConditions);
 
         $statusCounts = $this->ticketRepository->getStatusCounts($whereConditions, $filters);
-
+        // dd($tickets);
         $ticketsData = $tickets->getCollection()->map(function ($ticket) use ($employeeData, $userRoles) {
             $status = $ticket->STATUS ?? $ticket->status;
             $ticket->action = $this->determineTicketAction($ticket, $status, $employeeData, $userRoles);
@@ -233,11 +233,17 @@ class TicketService
         $isRequestor = (($ticket->employid ?? null) == $employeeData['emp_id']);
         $isSupport = in_array('MIS_SUPERVISOR', $userRoles) ||
             in_array('SUPPORT_TECHNICIAN', $userRoles);
+        $isSeniorApprover = in_array('SENIOR_APPROVER', $userRoles);
 
+        $isSupportService = ($ticket->type_of_request ?? '') === 'Support Services';
+        // dd($ticket->type_of_request);
+        // dd($isSupport, $isSupportService, $isSeniorApprover);
         // OPEN (1)
         if ($status == 1) {
-            if ($isRequestor) {
+            if ($isRequestor && !$isSupportService) {
                 $actions = ['View', 'Cancel'];
+            } elseif ($isRequestor && $isSupport && $isSupportService) {
+                $actions = ['Ongoing', 'Resolve', 'Cancel'];
             } elseif ($isSupport) {
                 $actions = ['Ongoing', 'Resolve', 'Cancel'];
             } else {
@@ -264,7 +270,9 @@ class TicketService
 
         // RESOLVED (4)
         if ($status == 4) {
-            if ($isRequestor) {
+            if ($isRequestor && $isSupportService) {
+                $actions = ['Close', 'Return'];
+            } elseif ($isSupportService && $isSeniorApprover && !$isRequestor) {
                 $actions = ['Close', 'Return'];
             } else {
                 $actions = ['View'];

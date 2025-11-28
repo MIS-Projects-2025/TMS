@@ -16,12 +16,15 @@ class SupportMiddleware
             abort(403, 'Unauthorized: Please log in to access this page.');
         }
 
-        // Get role
-        $role = $empData['emp_system_role'] ?? null;
+        // Get roles (array)
+        $roles = $empData['emp_system_roles'] ?? [];
 
-        // Allow only support or supervisor
-        if (!in_array($role, ['support', 'supervisor'])) {
-            // Redirect non-support users to Generate Ticket page
+        // Allowed roles
+        $allowedRoles = ['support', 'supervisor', 'senior approver'];
+
+        // Check if user has at least one allowed role
+        if (!array_intersect($roles, $allowedRoles)) {
+            // Redirect non-allowed users to Generate Ticket page
             return redirect()->route('tickets');
         }
 

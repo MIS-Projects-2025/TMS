@@ -125,4 +125,12 @@ class Ticket extends Model
     {
         $this->attributes['CLOSED_AT'] = $value;
     }
+    public function setTypeOfRequestAttribute($value)
+    {
+        $this->attributes['TYPE_OF_REQUEST'] = $value;
+    }
+    public function getTypeOfRequestAttribute()
+    {
+        return $this->attributes['TYPE_OF_REQUEST'] ?? null;
+    }
 }

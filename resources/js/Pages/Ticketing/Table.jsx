@@ -113,22 +113,21 @@ const TicketingTable = () => {
             setProcessingTicket(false);
         }
     };
- const handleRowClick = async (record) => {
-    console.log("HandleROwClick", record);
+    const handleRowClick = async (record) => {
+        console.log("HandleROwClick", record);
+        // For support staff, auto-process the ticket if it's in Open status
+        if (is_support_staff && (record.STATUS == 1 || record.STATUS == 3)) {
+            const success = await autoProcessTicket(record.TICKET_ID);
+            if (!success) {
+                // If auto-processing fails, don't open the drawer
+                return;
+            }
+        }
 
-     const isOwnTicket = emp_data.emp_id == record.EMPLOYID;
-    const isAutoProcessStatus = record.STATUS == 1 || record.STATUS == 3;
-
-    if (is_support_staff && isAutoProcessStatus && !isOwnTicket) {
-        const success = await autoProcessTicket(record.TICKET_ID);
-        if (!success) return;
-    }
-
-    setSelectedTicket(record);
-    setIsDrawerOpen(true);
-    fetchTicketHistory(record.TICKET_ID);
-};
-
+        setSelectedTicket(record);
+        setIsDrawerOpen(true);
+        fetchTicketHistory(record.TICKET_ID);
+    };
     const fetchTicketHistory = async (ticketId) => {
         setLoadingHistory(true);
         try {
