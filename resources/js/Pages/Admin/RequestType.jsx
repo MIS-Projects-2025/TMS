@@ -171,7 +171,7 @@ const RequestType = () => {
                             icon={<PlusOutlined />}
                             onClick={openCreateDrawer}
                         >
-                            Create Requestdsaddas Type
+                            Create Request Type
                         </Button>
                     }
                 >
