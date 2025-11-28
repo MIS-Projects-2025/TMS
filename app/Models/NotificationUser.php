@@ -8,7 +8,7 @@ use Illuminate\Notifications\Notifiable;
 class NotificationUser extends Authenticatable
 {
     use Notifiable;
-
+    protected $connection = 'mysql';
     protected $table = 'notification_users';
     protected $primaryKey = 'emp_id';
     public $incrementing = false;

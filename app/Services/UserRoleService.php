@@ -14,9 +14,11 @@ class UserRoleService
         return $dept === 'MIS' &&
             (
                 strpos($jobTitle, 'mis support technician') !== false ||
+                strpos($jobTitle, 'network technician') !== false ||
                 (strpos($jobTitle, 'mis') !== false && strpos($jobTitle, 'supervisor') !== false)
             );
     }
+
 
     public function isDepartmentHead($empData)
     {

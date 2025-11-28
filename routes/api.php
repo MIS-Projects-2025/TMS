@@ -15,8 +15,15 @@ use App\Http\Controllers\TicketingController;
 
 
 Route::post('/MTS/broadcasting/auth', function (Request $request) {
+    Log::info('Broadcast auth hit', [
+        'headers' => $request->headers->all(),
+        'cookies' => $request->cookies->all(),
+        'session' => session()->all(),
+        'body' => $request->all(),
+    ]);
     try {
         $empData = session('emp_data');
+
         Log::info('Broadcast Auth Session:', ['emp_data' => $empData]);
 
         $user = $empData ? \App\Models\NotificationUser::firstOrCreate(
@@ -52,7 +59,6 @@ Route::post('/MTS/broadcasting/auth', function (Request $request) {
         ], 500);
     }
 });
-
 
 
 // ========== PROTECTED API ROUTES (Protected by AuthMiddleware) ==========

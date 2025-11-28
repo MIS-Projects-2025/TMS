@@ -142,48 +142,56 @@ class TicketRepository
     ): LengthAwarePaginator {
         $query = Ticket::with('handler', 'closer');
 
-        // Apply user-based filtering for On Process tickets (applies to ALL queries)
         $userId = $filters['userId'] ?? null;
         $userRoles = $filters['userRoles'] ?? [];
 
         if ($userId) {
             $query->where(function ($q) use ($userId, $userRoles) {
                 $q->where(function ($q2) use ($userId) {
-                    // Include all non-OnProcess tickets (will be further filtered later)
+                    // Include all non-OnProcess tickets
                     $q2->where('status', '!=', 2);
                 })
                     ->orWhere(function ($q2) use ($userId) {
-                        // Only include OnProcess tickets if current user processed them (LATEST action)
+                        // Include OnProcess tickets if current user processed them or is the creator
                         $q2->where('status', 2)
-                            ->whereExists(function ($q3) use ($userId) {
-                                $q3->select(DB::raw(1))
-                                    ->from('ticketing_support_workflow as w1')
-                                    ->whereColumn('w1.TICKET_ID', 'ticketing_support.TICKET_ID')
-                                    ->where('w1.ACTION_TYPE', 'ONPROCESS')
-                                    ->where('w1.ACTION_BY', $userId)
-                                    ->whereRaw('w1.ACTION_AT = (
-                                SELECT MAX(w2.ACTION_AT) 
-                                FROM ticketing_support_workflow w2 
-                                WHERE w2.TICKET_ID = w1.TICKET_ID 
-                                AND w2.ACTION_TYPE = "ONPROCESS"
-                            )');
+                            ->where(function ($sub) use ($userId) {
+                                $sub->where('EMPLOYID', $userId) // they created/requested it
+                                    ->orWhereExists(function ($q3) use ($userId) {
+                                        $q3->select(DB::raw(1))
+                                            ->from('ticketing_support_workflow as w1')
+                                            ->whereColumn('w1.TICKET_ID', 'ticketing_support.TICKET_ID')
+                                            ->where('w1.ACTION_TYPE', 'ONPROCESS')
+                                            ->where('w1.ACTION_BY', $userId)
+                                            ->whereRaw('w1.ACTION_AT = (
+                                        SELECT MAX(w2.ACTION_AT)
+                                        FROM ticketing_support_workflow w2
+                                        WHERE w2.TICKET_ID = w1.TICKET_ID
+                                        AND w2.ACTION_TYPE = "ONPROCESS"
+                                    )');
+                                    });
                             });
                     });
-            });
 
-            // Additional filtering for Support Technicians on closed statuses
-            // This applies to ALL views including "all tickets"
-            if (in_array('SUPPORT_TECHNICIAN', $userRoles) && !in_array('MIS_SUPERVISOR', $userRoles)) {
-                $query->where(function ($q) use ($userId) {
-                    // For statuses 4,5,6,7 (resolved, closed, returned, cancel), only show if they handled it
+                // Support Technician filter for closed/resolved/returned tickets
+                if (in_array('SUPPORT_TECHNICIAN', $userRoles) && !in_array('MIS_SUPERVISOR', $userRoles)) {
                     $q->where(function ($q2) use ($userId) {
-                        $q2->whereIn('status', [4, 5, 6, 7])
-                            ->where('HANDLED_BY', $userId);
-                    })
-                        // For all other statuses, no restriction
-                        ->orWhereNotIn('status', [4, 5, 6, 7]);
-                });
-            }
+                        $q2->where(function ($q3) use ($userId) {
+                            $q3->whereIn('status', [4, 5, 6, 7])
+                                ->where(function ($sub) use ($userId) {
+                                    $sub->where('HANDLED_BY', $userId)
+                                        ->orWhere('EMPLOYID', $userId)
+                                        ->orWhereExists(function ($w) use ($userId) {
+                                            $w->select(DB::raw(1))
+                                                ->from('ticketing_support_workflow')
+                                                ->whereColumn('ticketing_support_workflow.TICKET_ID', 'ticketing_support.TICKET_ID')
+                                                ->where('ticketing_support_workflow.ACTION_BY', $userId);
+                                        });
+                                });
+                        })
+                            ->orWhereNotIn('status', [4, 5, 6, 7]); // other statuses unaffected
+                    });
+                }
+            });
         }
 
         // Apply search filter
@@ -198,33 +206,32 @@ class TicketRepository
             });
         }
 
-        // Apply status filter (basic data filtering only)
+        // Status filter
         if (!empty($filters['status']) && $filters['status'] !== 'all') {
-            // Handle On Process status (both string 'onProcess' and numeric 2)
-            if ($filters['status'] === 'onProcess' || $filters['status'] == 2) {
-                $userId = $filters['userId'] ?? "";
+            $userId = $filters['userId'] ?? "";
+            $criticalTime = Carbon::now()->subMinutes(30);
 
+            if ($filters['status'] === 'onProcess' || $filters['status'] == 2) {
                 $query->where('status', 2)
-                    ->whereExists(function ($q) use ($userId) {
-                        $q->select(DB::raw(1))
-                            ->from('ticketing_support_workflow as w1')
-                            ->whereColumn('w1.TICKET_ID', 'ticketing_support.TICKET_ID')
-                            ->where('w1.ACTION_TYPE', 'ONPROCESS')
-                            ->where('w1.ACTION_BY', $userId)
-                            ->whereRaw('w1.ACTION_AT = (
-                            SELECT MAX(w2.ACTION_AT) 
-                            FROM ticketing_support_workflow w2 
-                            WHERE w2.TICKET_ID = w1.TICKET_ID 
-                            AND w2.ACTION_TYPE = "ONPROCESS"
-                        )');
+                    ->where(function ($q) use ($userId) {
+                        $q->where('EMPLOYID', $userId)
+                            ->orWhereExists(function ($q2) use ($userId) {
+                                $q2->select(DB::raw(1))
+                                    ->from('ticketing_support_workflow as w1')
+                                    ->whereColumn('w1.TICKET_ID', 'ticketing_support.TICKET_ID')
+                                    ->where('w1.ACTION_TYPE', 'ONPROCESS')
+                                    ->where('w1.ACTION_BY', $userId)
+                                    ->whereRaw('w1.ACTION_AT = (
+                                   SELECT MAX(w2.ACTION_AT)
+                                   FROM ticketing_support_workflow w2
+                                   WHERE w2.TICKET_ID = w1.TICKET_ID
+                                   AND w2.ACTION_TYPE = "ONPROCESS"
+                               )');
+                            });
                     });
-            }
-            // Handle other status filters
-            elseif ($filters['status'] === 'critical') {
-                $criticalTime = Carbon::now()->subMinutes(30);
+            } elseif ($filters['status'] === 'critical') {
                 $query->where('status', 1)->where('created_at', '<=', $criticalTime);
             } elseif ($filters['status'] === 'open') {
-                $criticalTime = Carbon::now()->subMinutes(30);
                 $query->where(function ($q) use ($criticalTime) {
                     $q->where(function ($q2) use ($criticalTime) {
                         $q2->where('status', 1)
@@ -232,18 +239,17 @@ class TicketRepository
                     })
                         ->orWhere('status', 3);
                 });
-            } elseif (($filters['status'] === 'returned')) {
+            } elseif ($filters['status'] === 'returned') {
                 $query->whereIn('status', [6, 7]);
             } elseif (in_array($filters['status'], ['resolved', 'closed'])) {
-                $statusMap = ['resolved' => 4, 'closed' => 5,];
+                $statusMap = ['resolved' => 4, 'closed' => 5];
                 $query->where('status', $statusMap[$filters['status']]);
             } elseif (is_numeric($filters['status'])) {
-                // For other numeric statuses (not 2)
                 $query->where('status', $filters['status']);
             }
         }
 
-        // Apply additional where conditions
+        // Additional where conditions
         foreach ($whereConditions as $condition) {
             if (count($condition) === 3) {
                 $query->where($condition[0], $condition[1], $condition[2]);
@@ -252,17 +258,17 @@ class TicketRepository
             }
         }
 
-        // Apply whereIn conditions
+        // WhereIn conditions
         foreach ($whereInConditions as $condition) {
             if (count($condition) === 2) {
                 $query->whereIn($condition[0], $condition[1]);
             }
         }
 
-        // Apply sorting and pagination
         return $query->orderBy($filters['sortField'] ?? 'created_at', $filters['sortOrder'] ?? 'desc')
             ->paginate($filters['pageSize'] ?? 10, ['*'], 'page', $filters['page'] ?? 1);
     }
+
     /**
      * Get ticket counts by status (basic counting only)
      */
@@ -381,13 +387,20 @@ class TicketRepository
             // Additional filtering for Support Technicians on closed statuses
             if (in_array('SUPPORT_TECHNICIAN', $userRoles) && !in_array('MIS_SUPERVISOR', $userRoles)) {
                 $baseQuery->where(function ($q) use ($userId) {
-                    // For statuses 4,5,6,7 (resolved, closed, returned, cancel), only show if they handled it
                     $q->where(function ($q2) use ($userId) {
                         $q2->whereIn('status', [4, 5, 6, 7])
-                            ->where('HANDLED_BY', $userId);
+                            ->where(function ($sub) use ($userId) {
+                                $sub->where('HANDLED_BY', $userId)          // They handled it
+                                    ->orWhere('EMPLOYID', $userId)          // They created/requested it
+                                    ->orWhereExists(function ($w) use ($userId) {
+                                        $w->select(DB::raw(1))
+                                            ->from('ticketing_support_workflow')
+                                            ->whereColumn('ticketing_support_workflow.TICKET_ID', 'ticketing_support.TICKET_ID')
+                                            ->where('ticketing_support_workflow.ACTION_BY', $userId); // Any workflow action
+                                    });
+                            });
                     })
-                        // For all other statuses, no restriction
-                        ->orWhereNotIn('status', [4, 5, 6, 7]);
+                        ->orWhereNotIn('status', [4, 5, 6, 7]); // Other statuses remain unrestricted
                 });
             }
         }

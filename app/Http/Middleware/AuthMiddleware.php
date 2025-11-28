@@ -35,9 +35,15 @@ class AuthMiddleware
             if (stripos($currentUser->emp_jobtitle, 'MIS Senior Supervisor') !== false) {
                 $systemRole = 'supervisor';
             }
-            if (stripos($currentUser->emp_jobtitle, 'MIS Support Technician') !== false) {
+            if (
+                stripos($currentUser->emp_jobtitle, 'MIS Support Technician') !== false ||
+                stripos($currentUser->emp_jobtitle, 'Network Technician') !== false ||
+                stripos($currentUser->emp_jobtitle, 'Network') !== false
+            ) {
                 $systemRole = 'support';
             }
+
+
             // 3️⃣ Set session
             session(['emp_data' => [
                 'token' => $currentUser->token,
