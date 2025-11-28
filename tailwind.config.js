@@ -13,7 +13,6 @@ export default {
     theme: {
         extend: {
             fontFamily: {
-                // sans: ['Figtree', ...defaultTheme.fontFamily.sans],
                 sans: ['Poppins', ...defaultTheme.fontFamily.sans],
             },
             keyframes: {
@@ -28,8 +27,15 @@ export default {
         },
     },
 
-    plugins: [forms, require('daisyui')],
+    plugins: [
+        forms,
+        require('daisyui')
+    ],
+
     daisyui: {
-        themes: ['light', 'dark'], // add more if you want
+        base: false,     // ⛔ STOP DaisyUI from styling input/textarea/select
+        themes: ['light', 'dark'], 
+        utils: true,
+        logs: false,
     },
 };

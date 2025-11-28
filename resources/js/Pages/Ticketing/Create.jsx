@@ -1,6 +1,6 @@
 import React, { use, useState, useEffect } from "react";
 import { Form, message } from "antd";
-import { usePage } from "@inertiajs/react";
+import { Head } from "@inertiajs/react";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import { useTicketForm } from "@/Hooks/useTicketForm";
 import TicketForm from "@/Components/ticketing/TicketForm";
@@ -44,6 +44,7 @@ const Create = () => {
 
     return (
         <AuthenticatedLayout>
+                  <Head title="Generate Ticket" />
             <div className="text-center px-6 mb-6">
                 <div className="flex items-center justify-center gap-3 mb-1">
                     <h1 className="text-3xl font-bold">MIS Ticketing System</h1>

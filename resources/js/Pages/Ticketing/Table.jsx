@@ -1,6 +1,6 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import React, { useState, useEffect } from "react";
-import { usePage, router } from "@inertiajs/react";
+import { usePage, router,Head } from "@inertiajs/react";
 import { Table, Tag, Spin, Tooltip, Empty, message } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
@@ -311,6 +311,7 @@ const TicketingTable = () => {
 
     return (
         <AuthenticatedLayout>
+              <Head title="Tickets Table" />
             {isLoading ? (
                 <TicketFormSkeleton />
             ) : (

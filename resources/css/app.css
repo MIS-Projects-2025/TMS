@@ -9,3 +9,13 @@
 @plugin "daisyui" {
   themes: light --default, dark --prefersdark;
 }
+/* Fix Ant Design Input in dark mode */
+.ant-input,
+.ant-input-affix-wrapper {
+    background-color: var(--ant-color-bg-container) !important;
+    color: var(--ant-color-text) !important;
+}
+
+.ant-input::placeholder {
+    color: var(--ant-color-text-placeholder) !important;
+}
