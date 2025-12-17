@@ -20,14 +20,21 @@ export default function Sidebar() {
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false); // mobile toggle
 
     // Logout function
-    const logout = () => {
-        const token = localStorage.getItem("authify-token");
-        localStorage.removeItem("authify-token");
-        router.get(route("logout"));
-        window.location.href = `http://192.168.2.221/authify/public/logout?key=${encodeURIComponent(
-            token
-        )}&redirect=${encodeURIComponent(route("dashboard"))}`;
-    };
+ const logout = () => {
+    const token = localStorage.getItem("authify-token") || '';
+    
+   
+    localStorage.clear();
+    sessionStorage.clear();
+    
+
+    const timestamp = Date.now();
+    const currentUrl = encodeURIComponent(window.location.href);
+    
+    window.location.href = `http://192.168.2.221/authify/public/logout?token=${encodeURIComponent(
+        token
+    )}&redirect=${currentUrl}&t=${timestamp}`;
+};
 
     const formattedAppName = display_name
         ?.split(" ")

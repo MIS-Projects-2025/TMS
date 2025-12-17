@@ -8,6 +8,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use App\Models\Ticket;
 use App\Models\TicketLogs;
 use App\Models\TicketRemarksHistory;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -130,6 +131,23 @@ class TicketRepository
             ->whereRaw("? IN (APPROVER1, APPROVER2, APPROVER3)", [$userId])
             ->pluck('EMPLOYID')
             ->toArray();
+    }
+
+    public function getAssignedApprovers(string $requestorId): ?array
+    {
+        $requestor = User::where('EMPLOYID', $requestorId)
+            ->select('PRODLINE')
+            ->first();
+
+        if (!$requestor || !$requestor->PRODLINE) {
+            return null;
+        }
+
+        $approvers = User::getApproversByProdline($requestor->PRODLINE);
+
+        return [
+            'approvers' => $approvers,
+        ];
     }
 
     /**

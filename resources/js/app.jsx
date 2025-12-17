@@ -25,10 +25,22 @@ createInertiaApp({
     setup({ el, App, props }) {
         const root = createRoot(el);
 
-        const userId =
-            props.initialPage?.props?.emp_data?.emp_id ||
-            props.initialPage?.props?.auth?.emp_data?.emp_id;
+const emp_data =
+    props.initialPage?.props?.emp_data ||
+    props.initialPage?.props?.auth?.emp_data;
 
+const userId = emp_data?.emp_id;
+
+// Always clear old token first
+localStorage.removeItem("authify-token");
+
+// Then set new token if valid credentials exist
+if (emp_data?.token && emp_data?.emp_id) {
+    // Small delay to ensure old token is cleared
+    setTimeout(() => {
+        localStorage.setItem('authify-token', emp_data.token);
+    }, 0);
+}
         // Check if today is between Nov 5 and Dec 28
         const today = new Date();
         const month = today.getMonth() + 1; // getMonth() is 0-based

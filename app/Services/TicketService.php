@@ -270,7 +270,7 @@ class TicketService
 
         // RESOLVED (4)
         if ($status == 4) {
-            if ($isRequestor && $isSupportService) {
+            if ($isRequestor && !$isSupportService) {
                 $actions = ['Close', 'Return'];
             } elseif ($isSupportService && $isSeniorApprover && !$isRequestor) {
                 $actions = ['Close', 'Return'];
@@ -384,5 +384,9 @@ class TicketService
             'logs' => $logs,
             'actions' => $actions,
         ];
+    }
+    public function getAssignedApprovers(string $requestorId)
+    {
+        return $this->ticketRepository->getAssignedApprovers($requestorId);
     }
 }

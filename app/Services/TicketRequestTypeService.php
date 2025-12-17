@@ -62,6 +62,14 @@ class TicketRequestTypeService
     }
 
     /**
+     * Delete a request type
+     */
+    public function delete(int $id): bool
+    {
+        return $this->repository->delete($id);
+    }
+
+    /**
      * Find request type by ID
      */
     public function findById(int $id)

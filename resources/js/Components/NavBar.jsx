@@ -4,14 +4,11 @@ import NotificationBell from "./NotificationBell";
 
 export default function NavBar() {
     const { emp_data } = usePage().props;
+   const logout = () => {
+        localStorage.clear();
+        sessionStorage.clear();
 
-    const logout = () => {
-        const token = localStorage.getItem("authify-token");
-        localStorage.removeItem("authify-token");
-        router.get(route("logout"));
-        window.location.href = `http://192.168.2.221/authify/public/logout?key=${encodeURIComponent(
-            token
-        )}&redirect=${encodeURIComponent(route("dashboard"))}`;
+        window.location.href = route("logout"); // Laravel handles SSO redirect
     };
 
     return (

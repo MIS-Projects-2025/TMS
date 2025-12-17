@@ -153,4 +153,8 @@ Route::prefix('api')->middleware(AuthMiddleware::class)->group(function () {
     });
     Route::get('/tickets/assigned/{empId}', [TicketingController::class, 'getAssignedTickets']);
     Route::get('/tickets/count', [TicketingController::class, 'getTicketsCount'])->name('tickets.count');
+    Route::get(
+        '/tickets/{ticketId}/assigned-approvers',
+        [TicketingController::class, 'getAssignedApprovers']
+    )->name('tickets.assignedApprovers');
 });

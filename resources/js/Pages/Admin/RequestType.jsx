@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Head, usePage, router } from "@inertiajs/react";
-import { Table, Tag, Card, Button, message } from "antd";
+import { Table, Tag, Card, Button, message, Popconfirm, Space } from "antd";
 import {
     CheckCircleOutlined,
     CloseCircleOutlined,
     PlusOutlined,
+    DeleteOutlined,
 } from "@ant-design/icons";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import { useRequestTypeDrawer } from "@/Hooks/useRequestTypeDrawer";
@@ -24,7 +25,7 @@ const RequestType = () => {
     } = useRequestTypeDrawer();
 
     // Map backend collection to table data
-    const dataSource = React.useMemo(
+    const dataSource = useMemo(
         () =>
             requestTypes?.map((type) => ({
                 key: type.id,
@@ -51,13 +52,11 @@ const RequestType = () => {
                     route("request-types.update", id),
                     formData
                 );
-                // console.log("update values:", data);
             } else {
                 response = await axios.post(
                     route("request-types.store"),
                     formData
                 );
-                // console.log("New values:", data);
             }
 
             if (response.data.success) {
@@ -70,7 +69,7 @@ const RequestType = () => {
                 );
 
                 closeDrawer();
-                router.reload({ only: ["requestTypes"] }); // Refresh the table data
+                router.reload({ only: ["requestTypes"] });
             } else {
                 message.error(response.data.message || "Operation failed");
             }
@@ -81,6 +80,29 @@ const RequestType = () => {
                     : "Failed to create request type. Please try again."
             );
             console.error("Request type submission error:", error);
+        }
+    };
+
+    const handleDelete = async (id, e) => {
+        // Stop propagation to prevent row click
+        e?.stopPropagation();
+
+        try {
+            const response = await axios.delete(
+                route("request-types.destroy", id)
+            );
+
+            if (response.data.success) {
+                message.success("Request type deleted successfully!");
+                router.reload({ only: ["requestTypes"] });
+            } else {
+                message.error(
+                    response.data.message || "Delete operation failed"
+                );
+            }
+        } catch (error) {
+            message.error("Failed to delete request type. Please try again.");
+            console.error("Request type deletion error:", error);
         }
     };
 
@@ -156,6 +178,32 @@ const RequestType = () => {
                     </Tag>
                 );
             },
+        },
+        {
+            title: "Actions",
+            key: "actions",
+            align: "center",
+            width: 100,
+            render: (_, record) => (
+                <Space size="small">
+                    <Popconfirm
+                        title="Delete Request Type"
+                        description="Are you sure you want to delete this request type?"
+                        onConfirm={(e) => handleDelete(record.id, e)}
+                        onCancel={(e) => e?.stopPropagation()}
+                        okText="Yes"
+                        cancelText="No"
+                        okButtonProps={{ danger: true }}
+                    >
+                        <Button
+                            type="text"
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    </Popconfirm>
+                </Space>
+            ),
         },
     ];
 

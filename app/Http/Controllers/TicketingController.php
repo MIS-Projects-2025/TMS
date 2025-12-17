@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Ticket;
 use App\Services\TicketService;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
@@ -184,6 +185,36 @@ class TicketingController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update ticket: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    public function getAssignedApprovers(string $ticketId)
+    {
+        try {
+            // Get ticket → requestor EMPLOYID
+            $ticket = Ticket::where('TICKET_ID', $ticketId)
+                ->select('EMPLOYID')
+                ->first();
+
+            if (!$ticket) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ticket not found'
+                ], 404);
+            }
+
+            // Resolve approvers using requestorId
+            $approvers = $this->ticketService
+                ->getAssignedApprovers($ticket->EMPLOYID);
+
+            return response()->json([
+                'success' => true,
+                'data' => $approvers
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
             ], 500);
         }
     }

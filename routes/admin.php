@@ -14,4 +14,5 @@ Route::prefix($app_name)
         Route::get('/requestTypes', [TicketRequestTypeController::class, 'index'])->name('request.type');
         Route::post('/requestTypes', [TicketRequestTypeController::class, 'store'])->name('request-types.store');
         Route::put('/requestTypes/{id}', [TicketRequestTypeController::class, 'update'])->name('request-types.update');
+        Route::delete('/requestTypes/{id}', [TicketRequestTypeController::class, 'destroy'])->name('request-types.destroy');
     });

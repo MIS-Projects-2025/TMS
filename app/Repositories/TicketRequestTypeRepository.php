@@ -128,6 +128,16 @@ class TicketRequestTypeRepository
     }
 
     /**
+     * Delete a request type
+     */
+    public function delete(int $id): bool
+    {
+        return DB::table('ticket_request_types')
+            ->where('id', $id)
+            ->delete() > 0;
+    }
+
+    /**
      * Find request type by ID
      */
     public function findById(int $id): ?object

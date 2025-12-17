@@ -5,93 +5,105 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Inertia\Inertia;
 use App\Models\NotificationUser;
 
 class AuthMiddleware
 {
     public function handle(Request $request, Closure $next)
     {
-        $token = $request->query('key') ?? session('emp_data.token');
 
-        // Redirect if no token
+        // 1️⃣ Get token from query or session
+        $tokenFromQuery   = $request->query('key');
+        $tokenFromSession = session('emp_data.token');
+        $tokenFromCookie  = $request->cookie('sso_token');
+        $token = $tokenFromQuery ?? $tokenFromSession ?? $tokenFromCookie;
+
+        // 2️⃣ No token → redirect to login
         if (!$token) {
             $redirectUrl = urlencode($request->fullUrl());
-            return redirect("http://192.168.2.221/authify/public/login?redirect={$redirectUrl}");
+            return redirect("https://192.168.2.221/authify/public/login?redirect={$redirectUrl}");
         }
 
-        // Fetch user if no session or a new key is passed
-        if (!session()->has('emp_data') || $request->query('key')) {
-            $currentUser = DB::connection('authify')
-                ->table('authify.authify_sessions')
-                ->where('token', $token)
-                ->first();
-
-            if (!$currentUser) {
-                $redirectUrl = urlencode($request->fullUrl());
-                return redirect("http://192.168.2.221/authify/public/login?redirect={$redirectUrl}");
+        // 3️⃣ Session exists and matches token → trust it
+        if (session()->has('emp_data') && session('emp_data.token') === $token) {
+            if ($tokenFromQuery) {
+                return redirect($request->url());
             }
+            return $next($request);
+        }
 
-            // Assign system roles
-            $systemRoles = [];
+        // 4️⃣ Fetch user from authify (only if session missing or token mismatch)
+        $currentUser = DB::connection('authify')
+            ->table('authify_sessions')
+            ->where('token', $token)
+            ->first();
 
-            // Supervisor
-            if (stripos($currentUser->emp_jobtitle, 'MIS Senior Supervisor') !== false) {
-                $systemRoles[] = 'supervisor';
-            }
+        if (!$currentUser) {
+            session()->forget('emp_data');
+            setcookie('sso_token', '', time() - 3600, '/');
+            $redirectUrl = urlencode($request->fullUrl());
+            return redirect("https://192.168.2.221/authify/public/login?redirect={$redirectUrl}");
+        }
 
-            // Support
-            if (
-                stripos($currentUser->emp_jobtitle, 'MIS Support Technician') !== false ||
-                stripos($currentUser->emp_jobtitle, 'Network Technician') !== false ||
-                stripos($currentUser->emp_jobtitle, 'Network') !== false
-            ) {
-                $systemRoles[] = 'support';
-            }
+        // 5️⃣ Assign system roles
+        $systemRoles = [];
+        $jobTitle = $currentUser->emp_jobtitle ?? '';
 
-            // Senior Approver
-            $seniorApproverIds = DB::connection('mysql')
-                ->table('senior_support_approver')
-                ->pluck('EMPLOYID')
-                ->toArray();
+        if (stripos($jobTitle, 'MIS Senior Supervisor') !== false) {
+            $systemRoles[] = 'supervisor';
+        }
 
-            if (in_array($currentUser->emp_id, $seniorApproverIds)) {
-                $systemRoles[] = 'senior approver';
-            }
+        if (
+            stripos($jobTitle, 'MIS Support Technician') !== false ||
+            stripos($jobTitle, 'Network Technician') !== false ||
+            stripos($jobTitle, 'Network') !== false
+        ) {
+            $systemRoles[] = 'support';
+        }
 
-            // Default role if none assigned
-            if (empty($systemRoles)) {
-                $systemRoles[] = 'N/A';
-            }
+        $seniorApproverIds = DB::connection('mysql')
+            ->table('senior_support_approver')
+            ->pluck('EMPLOYID')
+            ->toArray();
 
-            // Set session
-            session(['emp_data' => [
-                'token' => $currentUser->token,
-                'emp_id' => $currentUser->emp_id,
+        if (in_array($currentUser->emp_id, $seniorApproverIds)) {
+            $systemRoles[] = 'senior approver';
+        }
+
+        if (empty($systemRoles)) {
+            $systemRoles[] = 'N/A';
+        }
+
+        // 6️⃣ Set Laravel session
+        session()->put('emp_data', [
+            'token'            => $currentUser->token,
+            'emp_id'           => $currentUser->emp_id,
+            'emp_name'         => $currentUser->emp_name,
+            'emp_firstname'    => $currentUser->emp_firstname,
+            'emp_position'     => $currentUser->emp_position ?? null,
+            'emp_jobtitle'     => $currentUser->emp_jobtitle,
+            'emp_dept'         => $currentUser->emp_dept,
+            'emp_prodline'     => $currentUser->emp_prodline ?? null,
+            'emp_station'      => $currentUser->emp_station ?? null,
+            'generated_at'     => $currentUser->generated_at,
+            'emp_system_roles' => $systemRoles,
+        ]);
+
+        // 7️⃣ Ensure NotificationUser exists
+        $user = NotificationUser::firstOrCreate(
+            ['emp_id' => $currentUser->emp_id],
+            [
                 'emp_name' => $currentUser->emp_name,
-                'emp_position' => $currentUser->emp_position,
-                'emp_firstname' => $currentUser->emp_firstname,
-                'emp_jobtitle' => $currentUser->emp_jobtitle,
                 'emp_dept' => $currentUser->emp_dept,
-                'emp_prodline' => $currentUser->emp_prodline,
-                'emp_station' => $currentUser->emp_station,
-                'generated_at' => $currentUser->generated_at,
-                'emp_system_roles' => $systemRoles,
-            ]]);
+            ]
+        );
 
-            // Ensure NotificationUser exists
-            $user = NotificationUser::firstOrCreate(
-                ['emp_id' => $currentUser->emp_id],
-                [
-                    'emp_name' => $currentUser->emp_name,
-                    'emp_dept' => $currentUser->emp_dept,
-                ]
-            );
+        // 8️⃣ Set user resolver for broadcasting
+        $request->setUserResolver(fn() => $user);
 
-            // Set user for broadcasting
-            $request->setUserResolver(function () use ($user) {
-                return $user;
-            });
+        // 9️⃣ Remove key from URL after successful auth
+        if ($tokenFromQuery) {
+            return redirect($request->url());
         }
 
         return $next($request);
