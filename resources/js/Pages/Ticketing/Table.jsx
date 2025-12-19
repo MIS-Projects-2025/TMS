@@ -1,7 +1,7 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
-import React, { useState, useEffect } from "react";
-import { usePage, router, Head } from "@inertiajs/react";
-import { Table, Tag, Spin, Tooltip, Empty, message, Button } from "antd";
+import React, { useMemo } from "react";
+import { usePage, Head } from "@inertiajs/react";
+import { Table, Spin, Empty, Tag, Tooltip } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import TicketFormSkeleton from "@/Components/ticketing/TableSkeleton";
@@ -18,14 +18,18 @@ import {
     ArrowRightLeft,
     TicketPercent,
 } from "lucide-react";
+
+// Import new hooks
+import { useTicketDrawer } from "@/Hooks/useTicketDrawer";
+import { useTicketActions } from "@/Hooks/useTicketActions";
+import { useRealtimeTicketUpdates } from "@/Hooks/useRealtimeTicketUpdates";
+
 const TicketingTable = () => {
     const {
         emp_data,
         tickets,
         pagination,
         statusCounts,
-        user_roles,
-        is_support_staff,
         filters: initialFilters,
     } = usePage().props;
     console.log(usePage().props);
@@ -44,281 +48,165 @@ const TicketingTable = () => {
         statusCounts,
     });
 
+    const userRoles = emp_data?.emp_user_roles ?? [];
+    const isMISSupervisor = userRoles?.includes("MIS_SUPERVISOR");
+    const supportStaff =
+        isMISSupervisor || userRoles?.includes("SUPPORT_TECHNICIAN");
+
     const { ticketUpdates, clearTicketUpdates } = useNotifications();
 
-    const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-    const [selectedTicket, setSelectedTicket] = useState(null);
-    const [ticketLogs, setTicketLogs] = useState([]);
-    const [loadingHistory, setLoadingHistory] = useState(false);
-    const [processingTicket, setProcessingTicket] = useState(false);
+    // Use ticket drawer hook
+    const {
+        isDrawerOpen,
+        selectedTicket,
+        ticketLogs,
+        loadingHistory,
+        openDrawer,
+        closeDrawer,
+        handleTicketAction,
+    } = useTicketDrawer();
 
-    const isMISSupervisor = user_roles?.includes("MIS_SUPERVISOR");
-    // Handle real-time ticket updates by refetching the table
-    useEffect(() => {
-        if (ticketUpdates.length === 0) return;
-
-        console.log("🔄 Processing ticket updates:", ticketUpdates);
-
-        // Show toast notification for updates
-        ticketUpdates.forEach((update) => {
-            message.info(`Ticket ${update.ticketId} has been updated`, 2);
+    // Use ticket actions hook
+    const { processingTicket, handleRowClick, assignedApprovers } =
+        useTicketActions({
+            supportStaff,
         });
 
-        // Clear processed updates
-        clearTicketUpdates();
+    // Use real-time updates hook
+    useRealtimeTicketUpdates({ ticketUpdates, clearTicketUpdates });
 
-        // Refetch the table with current filters
-        router.reload({
-            only: ["tickets", "statusCounts", "pagination"],
-            preserveScroll: true,
-            preserveState: true,
-        });
-    }, [ticketUpdates, clearTicketUpdates]);
-    const autoProcessTicket = async (ticketId) => {
-        if (!is_support_staff) return false;
-        console.log("Auto Process");
+    // Table columns definition (kept in component due to JSX)
+    const columns = useMemo(() => {
+        const baseColumns = [
+            {
+                title: "Ticket ID",
+                dataIndex: "ticket_id",
+                key: "ticket_id",
+                width: 120,
+                sorter: true,
+            },
+            {
+                title: "Requestor",
+                dataIndex: "empname",
+                key: "empname",
+                width: 150,
+                sorter: true,
+            },
+            {
+                title: "Request Type",
+                dataIndex: "type_of_request",
+                key: "type_of_request",
+                width: 150,
+                sorter: true,
+            },
+            {
+                title: "Request Option",
+                dataIndex: "request_option",
+                key: "request_option",
+                width: 150,
+                sorter: true,
+            },
+            {
+                title: "Item Name",
+                dataIndex: "item_name",
+                key: "item_name",
+                width: 150,
+                sorter: true,
+                render: (itemName) => itemName || "-",
+            },
+            {
+                title: "Details",
+                dataIndex: "details",
+                key: "details",
+                width: 150,
+                sorter: true,
+                render: (itemName) => itemName || "-",
+            },
+            {
+                title: "Status",
+                dataIndex: "status",
+                key: "status",
+                width: 120,
+                sorter: true,
+                render: (_, record) => {
+                    const tag = (
+                        <Tag color={record.status_color || "default"}>
+                            {record.status_label || "-"}
+                        </Tag>
+                    );
 
-        setProcessingTicket(true);
-        try {
-            const payload = {
-                ticket_id: ticketId,
-                action: "ONPROCESS",
-                remarks: "Ticket automatically assigned to support staff",
-            };
+                    if (record.STATUS === 1 && isTicketCritical(record)) {
+                        return (
+                            <Tooltip
+                                title={`Open for more than 30 minutes - created at ${record.created_at}`}
+                            >
+                                {tag}
+                            </Tooltip>
+                        );
+                    }
 
-            const res = await axios.post(route("tickets.action"), payload);
-            if (res.data.success) {
-                message.success(`Ticket ${ticketId} is now being processed`);
+                    return tag;
+                },
+            },
+        ];
 
-                // Refresh the table data immediately after successful auto-process
-                router.reload({
-                    only: ["tickets", "statusCounts", "pagination"],
-                    preserveScroll: true,
-                    preserveState: true,
-                    onSuccess: () => {
-                        console.log("Table refreshed after auto-process");
-                    },
-                });
-
-                return true;
-            } else {
-                message.warning(res.data.message);
-                return false;
-            }
-        } catch (err) {
-            console.error("Failed to auto-process ticket:", err);
-            message.error("Failed to assign ticket");
-            return false;
-        } finally {
-            setProcessingTicket(false);
-        }
-    };
-
-    const fetchTicketHistory = async (ticketId) => {
-        setLoadingHistory(true);
-        try {
-            const { data } = await axios.get(
-                route("tickets.details", { ticketId })
-            );
-
-            const { success, message: msg, data: ticketData } = data;
-
-            if (!success) {
-                message.error(msg);
-                setTicketLogs([]);
-                return;
-            }
-
-            const { logs } = ticketData;
-            setTicketLogs(logs || []);
-        } catch (err) {
-            console.error(err.response || err);
-            message.error("Failed to fetch ticket history.");
-            setTicketLogs([]);
-        } finally {
-            setLoadingHistory(false);
-        }
-    };
-
-    const handleTicketAction = async (ticketId, action, remarks, rating) => {
-        console.log(action);
-
-        if (!remarks) {
-            message.error("Please enter remarks.");
-            return;
-        }
-
-        // Build payload
-        const payload = {
-            ticket_id: ticketId,
-            action,
-            remarks,
-            // Only include rating for CLOSE action
-            ...(action.toUpperCase() === "CLOSE" ? { rating } : {}),
+        const handledByColumn = {
+            title: "Handled By",
+            dataIndex: "handled_by_name",
+            key: "handled_by_name",
+            width: 120,
+            sorter: true,
+            render: (handledBy) => (
+                <Tooltip title={handledBy || "Not yet assigned"}>
+                    <div className="flex items-center gap-1">
+                        {handledBy || "-"}
+                    </div>
+                </Tooltip>
+            ),
         };
 
-        try {
-            const res = await axios.post(route("tickets.action"), payload);
-            if (res.data.success) {
-                message.success(res.data.message);
-                setIsDrawerOpen(false);
-                window.location.reload();
-            } else {
-                message.error(res.data.message);
-            }
-        } catch (err) {
-            message.error("Failed to update ticket.");
-        }
-    };
-    const fetchAssignedApprovers = async (ticketId) => {
-        try {
-            const res = await axios.get(
-                route("tickets.assignedApprovers", ticketId)
-            );
-            console.log("Assigned Approvers:", res.data);
-            return res.data;
-        } catch (error) {
-            console.error("Failed to fetch assigned approvers", error);
-            return null;
-        }
-    };
-    const handleRowClick = async (record) => {
-        console.log("Row clicked:", record);
+        const dateColumns = [
+            {
+                title: "Created At",
+                dataIndex: "created_at",
+                key: "created_at",
+                width: 150,
+                sorter: true,
+                render: (createdAt, record) => {
+                    const isCritical = isTicketCritical(record);
+                    const formatted = dayjs(createdAt).format("MMM DD, YYYY");
 
-        // Fetch approvers for THIS ticket only
-        await fetchAssignedApprovers(record.TICKET_ID);
-
-        if (is_support_staff && (record.STATUS == 1 || record.STATUS == 3)) {
-            const success = await autoProcessTicket(record.TICKET_ID);
-            if (!success) return;
-        }
-
-        setSelectedTicket(record);
-        setIsDrawerOpen(true);
-        fetchTicketHistory(record.TICKET_ID);
-    };
-    const columns = [
-        {
-            title: "Ticket ID",
-            dataIndex: "TICKET_ID",
-            key: "TICKET_ID",
-            width: 120,
-            sorter: true,
-        },
-        {
-            title: "Requestor",
-            dataIndex: "EMPNAME",
-            key: "EMPNAME",
-            width: 150,
-            sorter: true,
-        },
-        {
-            title: "Request Type",
-            dataIndex: "TYPE_OF_REQUEST",
-            key: "TYPE_OF_REQUEST",
-            width: 150,
-            sorter: true,
-        },
-        {
-            title: "Request Option",
-            dataIndex: "REQUEST_OPTION",
-            key: "REQUEST_OPTION",
-            width: 150,
-            sorter: true,
-        },
-        {
-            title: "Item Name",
-            dataIndex: "ITEM_NAME",
-            key: "ITEM_NAME",
-            width: 150,
-            sorter: true,
-            render: (itemName) => itemName || "-",
-        },
-        {
-            title: "Details",
-            dataIndex: "DETAILS",
-            key: "DETAILS",
-            width: 150,
-            sorter: true,
-            render: (itemName) => itemName || "-",
-        },
-        {
-            title: "Status",
-            dataIndex: "STATUS",
-            key: "STATUS",
-            width: 120,
-            sorter: true,
-            render: (_, record) => {
-                const tag = (
-                    <Tag color={record.status_color || "default"}>
-                        {record.status_label || "-"}
-                    </Tag>
-                );
-
-                if (record.STATUS === 1 && isTicketCritical(record)) {
-                    return (
-                        <Tooltip
-                            title={`Open for more than 30 minutes - created at ${record.CREATED_AT}`}
-                        >
-                            {tag}
+                    return isCritical ? (
+                        <Tooltip title="This ticket is critical - open for more than 30 minutes">
+                            <span style={{ color: "red", fontWeight: "bold" }}>
+                                {formatted}
+                            </span>
                         </Tooltip>
+                    ) : (
+                        formatted
                     );
-                }
-
-                return tag;
+                },
             },
-        },
-
-        ...(isMISSupervisor &&
-        (activeFilter === "all" ||
-            activeFilter === "resolved" ||
-            activeFilter === "returned" ||
-            activeFilter === "closed")
-            ? [
-                  {
-                      title: "Handled By",
-                      dataIndex: "handled_by_name",
-                      key: "handled_by_name",
-                      width: 120,
-                      sorter: true,
-                      render: (handledBy, record) => (
-                          <Tooltip title={handledBy || "Not yet assigned"}>
-                              <div className="flex items-center gap-1">
-                                  {handledBy || "-"}
-                              </div>
-                          </Tooltip>
-                      ),
-                  },
-              ]
-            : []),
-        {
-            title: "Created At",
-            dataIndex: "CREATED_AT",
-            key: "CREATED_AT",
-            width: 150,
-            sorter: true,
-            render: (createdAt, record) => {
-                const isCritical = isTicketCritical(record);
-                const formatted = dayjs(createdAt).format("MMM DD, YYYY");
-
-                return isCritical ? (
-                    <Tooltip title="This ticket is critical - open for more than 30 minutes">
-                        <span style={{ color: "red", fontWeight: "bold" }}>
-                            {formatted}
-                        </span>
-                    </Tooltip>
-                ) : (
-                    formatted
-                );
+            {
+                title: "Duration",
+                key: "duration",
+                width: 100,
+                render: (_, record) => <DurationCell record={record} />,
             },
-        },
-        {
-            title: "Duration",
-            key: "duration",
-            width: 100,
-            render: (_, record) => <DurationCell record={record} />,
-        },
-    ];
+        ];
+
+        // Conditionally insert "Handled By" column
+        const shouldShowHandledBy =
+            isMISSupervisor &&
+            (activeFilter === "all" ||
+                activeFilter === "resolved" ||
+                activeFilter === "returned" ||
+                activeFilter === "closed");
+
+        return shouldShowHandledBy
+            ? [...baseColumns, handledByColumn, ...dateColumns]
+            : [...baseColumns, ...dateColumns];
+    }, [isMISSupervisor, activeFilter, isTicketCritical]);
 
     const isLoading = false;
 
@@ -430,9 +318,7 @@ const TicketingTable = () => {
                                 <Table
                                     columns={columns}
                                     dataSource={tickets}
-                                    rowKey={(record) =>
-                                        record.TICKET_ID || record.ticket_id
-                                    }
+                                    rowKey={(record) => record.ticket_id}
                                     pagination={{
                                         current: pagination?.current_page || 1,
                                         pageSize: pagination?.per_page || 10,
@@ -448,11 +334,11 @@ const TicketingTable = () => {
                                     className="bg-base-100 rounded-xl shadow-md"
                                     loading={loading}
                                     onRow={(record) => ({
-                                        onClick: () => handleRowClick(record),
+                                        onClick: () =>
+                                            handleRowClick(record, openDrawer),
                                         style: {
                                             cursor: "pointer",
-                                            // Highlight open tickets for support staff
-                                            ...(is_support_staff &&
+                                            ...(supportStaff &&
                                             (record.STATUS === 1 ||
                                                 record.status === 1)
                                                 ? { backgroundColor: "#f0f9ff" }
@@ -472,11 +358,12 @@ const TicketingTable = () => {
             <TicketDetailsDrawer
                 open={isDrawerOpen}
                 ticket={selectedTicket}
-                onClose={() => setIsDrawerOpen(false)}
+                onClose={closeDrawer}
                 handleButtonClick={handleTicketAction}
                 action={selectedTicket?.action}
                 ticketLogs={ticketLogs}
                 loadingHistory={loadingHistory}
+                assignedApprovers={assignedApprovers}
             />
         </AuthenticatedLayout>
     );

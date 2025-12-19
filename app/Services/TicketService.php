@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\User;
 use App\Repositories\TicketRepository;
 use App\Repositories\TicketRequestTypeRepository;
 use App\Services\TicketStatusService;
@@ -78,15 +79,7 @@ class TicketService
 
             $ticket = $this->ticketRepository->createTicket($mainTicketData);
 
-            // Log creation
-            $this->ticketRepository->createTicketLog([
-                'ticket_id' => $ticketId,
-                'action_type' => 'CREATED',
-                'action_by' => $employeeData['emp_id'],
-                'action_at' => now(),
-                'remarks' => 'Ticket created by user',
-                'metadata' => json_encode(['form_data' => $ticketData, 'employee_data' => $employeeData]),
-            ]);
+
 
             // Notify MIS support
             $this->notificationService->notifyTicketAction(
@@ -101,30 +94,32 @@ class TicketService
         });
     }
 
-    public function getTicketsDataTable(array $filters, array $employeeData, array $userRoles): array
+    public function getTicketsDataTable(array $filters, array $employeeData): array
     {
-        // Business logic: Apply role-based access control
-        $whereConditions = $this->buildRoleBasedConditions($employeeData['emp_id'], $userRoles);
-        $filters['userId'] = $employeeData['emp_id'];
-        $filters['userRoles'] = $userRoles; // Pass user roles to repository
+        // Get user roles from emp_user_roles inside employeeData
+        $userRoles = $employeeData['emp_user_roles'] ?? [];
 
-        // Get data from repository
+        // Role-based access
+        $whereConditions = $this->buildRoleBasedConditions($employeeData);
+
+        $filters['userId'] = $employeeData['emp_id'];
+        $filters['userRoles'] = $userRoles;
+
+        // Get tickets
         $tickets = $this->ticketRepository->getTicketsWithFilters($filters, $whereConditions);
 
-        $statusCounts = $this->ticketRepository->getStatusCounts($whereConditions, $filters);
-        // dd($tickets);
-        $ticketsData = $tickets->getCollection()->map(function ($ticket) use ($employeeData, $userRoles) {
-            $status = $ticket->STATUS ?? $ticket->status;
-            $ticket->action = $this->determineTicketAction($ticket, $status, $employeeData, $userRoles);
+        $statusCounts = $this->ticketRepository->getStatusCounts($filters, $whereConditions);
+
+        $ticketsData = $tickets->getCollection()->map(function ($ticket) use ($employeeData) {
+            $status = $ticket->status ?? $ticket->status;
+            $ticket->action = $this->determineTicketAction($ticket, $status, $employeeData);
             $ticket->status_label = TicketStatusService::getStatusLabel($ticket);
             $ticket->status_color = TicketStatusService::getStatusColor($ticket);
 
-            // map handled_by_name
             $ticket->handled_by_name = $ticket->handler->EMPNAME ?? 'N/A';
             $ticket->closed_by_name   = $ticket->closer->EMPNAME ?? 'N/A';
 
-            // remove full object
-            unset($ticket->handler);
+            unset($ticket->handler, $ticket->closer);
 
             return $ticket;
         });
@@ -139,25 +134,24 @@ class TicketService
             ],
             'statusCounts' => $statusCounts,
             'filters' => $filters,
-            'user_roles' => $userRoles, // Include user roles in response
-            'is_support_staff' => in_array('MIS_SUPERVISOR', $userRoles) ||
-                in_array('SUPPORT_TECHNICIAN', $userRoles), // Add this flag
         ];
     }
+
 
     public function ticketAction(
         string $ticketId,
         string $userId,
         string $actionType = 'RESOLVE',
         string $remarks = '',
-        ?int $rating = null
+        ?int $rating = null,
+        ?string $assignedTo = null
     ): bool {
         $actionType = strtoupper($actionType);
-        if (!in_array($actionType, ['RESOLVE', 'CLOSE', 'RETURN', 'ONGOING', 'CANCEL', 'ONPROCESS'])) {
+        if (!in_array($actionType, ['RESOLVE', 'CLOSE', 'RETURN', 'ONGOING', 'CANCEL', 'ONPROCESS', 'ASSIGN'])) {
             throw new \InvalidArgumentException('Invalid action type');
         }
 
-        return DB::transaction(function () use ($ticketId, $userId, $actionType, $remarks, $rating) {
+        return DB::transaction(function () use ($ticketId, $userId, $actionType, $remarks, $rating, $assignedTo) {
 
             $ticket = $this->ticketRepository->findTicketById($ticketId);
             if (!$ticket) return false;
@@ -168,44 +162,43 @@ class TicketService
                 'ONPROCESS' => 2,
                 'ONGOING' => 3,
                 'RESOLVE' => 4,
+                'ASSIGN' => 4,
                 'CLOSE' => 5,
                 'RETURN' => 6,
                 'CANCEL' => 7
             ];
             $newStatus = $statusMap[$actionType];
-
+            // dd($actionType);
             $updateData = ['status' => $newStatus];
+
+            if ($actionType === 'ASSIGN' || $actionType === 'RESOLVE') {
+                if ($assignedTo) {
+                    $updateData['assigned_to'] = $assignedTo;
+                    $updateData['assigned_at'] = now();
+                    $updateData['assigned_by'] = $userId;
+                }
+            }
+
             if ($actionType === 'RESOLVE') {
                 $updateData['handled_by'] = $userId;
                 $updateData['handled_at'] = now();
             }
+
             if ($actionType === 'CLOSE') {
                 $updateData['closed_by'] = $userId;
                 $updateData['closed_at'] = now();
                 if (!is_null($rating)) $updateData['rating'] = $rating;
             }
 
+
+            // dd($updateData);
+            $ticket->currentAction = $actionType;
+
             $this->ticketRepository->updateTicket($ticket, $updateData);
 
             // Log action
             $logRemarks = $remarks ?: ucfirst(strtolower($actionType)) . ' by user';
-            $this->ticketRepository->createTicketLog([
-                'ticket_id' => $ticket->ticket_id,
-                'action_type' => $actionType,
-                'action_by' => $userId,
-                'action_at' => now(),
-                'remarks' => $logRemarks,
-                'metadata' => json_encode([
-                    'ticket' => [
-                        'id' => $ticket->id,
-                        'request_type' => $ticket->type_of_request,
-                        'request_option' => $ticket->request_option,
-                        'item_name' => $ticket->item_name,
-                        'details' => $ticket->details,
-                    ],
-                    'status_change' => ['old_status' => $oldStatus, 'new_status' => $newStatus]
-                ]),
-            ]);
+
 
             // Get the actual actor's name
             $actorUser = $this->userRepo->findUserById($userId);
@@ -225,8 +218,9 @@ class TicketService
     /**
      * Business logic: Determine available action for a ticket
      */
-    private function determineTicketAction($ticket, int $status, array $employeeData, array $userRoles): array
+    private function determineTicketAction($ticket, int $status, array $employeeData): array
     {
+        $userRoles = $employeeData['emp_user_roles'] ?? [];
         $actions = ['View'];
         $actionLabel = 'Remarks'; // default
 
@@ -236,6 +230,10 @@ class TicketService
         $isSeniorApprover = in_array('SENIOR_APPROVER', $userRoles);
 
         $isSupportService = ($ticket->type_of_request ?? '') === 'Support Services';
+
+        // NEW: Check if current user is the assigned employee
+        $isAssignedEmployee = !empty($ticket->assigned_to) &&
+            ($ticket->assigned_to == $employeeData['emp_id']);
         // dd($ticket->type_of_request);
         // dd($isSupport, $isSupportService, $isSeniorApprover);
         // OPEN (1)
@@ -270,14 +268,31 @@ class TicketService
 
         // RESOLVED (4)
         if ($status == 4) {
-            if ($isRequestor && !$isSupportService) {
-                $actions = ['Close', 'Return'];
-            } elseif ($isSupportService && $isSeniorApprover && !$isRequestor) {
-                $actions = ['Close', 'Return'];
-            } else {
-                $actions = ['View'];
+            // Support staff can always view and manage assignments (even if already assigned)
+            if ($isSupport && !$isAssignedEmployee) {
+                $actions = ['Assign']; // Support can view and reassign via drawer UI
+                $actionLabel = 'Assignment'; // Special label to show assignment is available
+            }
+            // If someone is assigned, ONLY they can close (not original requestor)
+            elseif (!empty($ticket->assigned_to)) {
+                if ($isAssignedEmployee) {
+                    $actions = ['Close', 'Return'];
+                } else {
+                    $actions = ['View'];
+                }
+            }
+            // No assignment - use default logic
+            else {
+                if ($isRequestor && !$isSupportService) {
+                    $actions = ['Close', 'Return'];
+                } elseif ($isSupportService && $isSeniorApprover && !$isRequestor) {
+                    $actions = ['Close', 'Return'];
+                } else {
+                    $actions = ['View'];
+                }
             }
         }
+
 
         // RETURNED (6)
         if ($status == 6) {
@@ -306,8 +321,11 @@ class TicketService
     /**
      * Business logic: Build role-based access conditions
      */
-    private function buildRoleBasedConditions(string $userId, array $userRoles): array
+    private function buildRoleBasedConditions(array $employeeData): array
     {
+        $userId = $employeeData['emp_id'];
+        $userRoles = $employeeData['emp_user_roles'] ?? [];
+
         $conditions = [];
 
         if (in_array('MIS_SUPERVISOR', $userRoles) || in_array('SUPPORT_TECHNICIAN', $userRoles) || in_array('OD', $userRoles)) {
@@ -340,53 +358,67 @@ class TicketService
         }
     }
 
-    public function getTicketDetails(string $ticketId, array $employeeData, array $userRoles): ?array
+    public function getTicketDetails(string $ticketId, array $employeeData): ?array
     {
-        // Fetch the ticket
         $ticket = $this->ticketRepository->findTicketById($ticketId);
-        if (!$ticket) {
-            return null;
-        }
+        if (!$ticket) return null;
 
-        // Get ticket logs (includes old/new status in metadata)
-        $logs = $this->ticketRepository->getTicketLogs($ticketId);
+        $actions = $this->determineTicketAction(
+            $ticket,
+            $ticket->status,
+            $employeeData
+        );
 
-        // Determine available actions
-        $status = $ticket->status;
-        $actions = $this->determineTicketAction($ticket, $status, $employeeData, $userRoles);
-
-        // Add status labels and colors to the ticket itself
         $ticket->status_label = TicketStatusService::getStatusLabel($ticket);
         $ticket->status_color = TicketStatusService::getStatusColor($ticket);
         $ticket->action = $actions;
+        $ticket->assigned_to_name = null;
+        if (!empty($ticket->assigned_to)) {
+            $assignedUser = User::find($ticket->assigned_to);
+            $ticket->assigned_to_name = $assignedUser->EMPNAME ?? null;
+        }
+        return [
+            'ticket'  => $ticket,
+            'actions' => $actions,
+        ];
+    }
 
-        // Add labels/colors for old/new status in each log
-        $logs = $logs->map(function ($log) {
-            $log['OLD_STATUS_LABEL'] = $log['OLD_STATUS'] !== null
-                ? TicketStatusService::getStatusLabelById($log['OLD_STATUS'])
-                : null;
-            $log['OLD_STATUS_COLOR'] = $log['OLD_STATUS'] !== null
-                ? TicketStatusService::getStatusColorById($log['OLD_STATUS'])
+    public function getTicketLogs(string $ticketId, int $perPage = 5)
+    {
+        $logs = $this->ticketRepository->getTicketLogs($ticketId, $perPage);
+
+        $logs->getCollection()->transform(function ($log) {
+            $oldStatus = $log['OLD_VALUES']['status'] ?? null;
+            $newStatus = $log['NEW_VALUES']['status'] ?? null;
+
+            $log['OLD_STATUS'] = $oldStatus;
+            $log['NEW_STATUS'] = $newStatus;
+
+            $log['OLD_STATUS_LABEL'] = $oldStatus
+                ? TicketStatusService::getStatusLabelById((int) $oldStatus)
                 : null;
 
-            $log['NEW_STATUS_LABEL'] = $log['NEW_STATUS'] !== null
-                ? TicketStatusService::getStatusLabelById($log['NEW_STATUS'])
+            $log['OLD_STATUS_COLOR'] = $oldStatus
+                ? TicketStatusService::getStatusColorById((int) $oldStatus)
                 : null;
-            $log['NEW_STATUS_COLOR'] = $log['NEW_STATUS'] !== null
-                ? TicketStatusService::getStatusColorById($log['NEW_STATUS'])
+
+            $log['NEW_STATUS_LABEL'] = $newStatus
+                ? TicketStatusService::getStatusLabelById((int) $newStatus)
+                : null;
+
+            $log['NEW_STATUS_COLOR'] = $newStatus
+                ? TicketStatusService::getStatusColorById((int) $newStatus)
                 : null;
 
             return $log;
         });
 
-        return [
-            'ticket' => $ticket,
-            'logs' => $logs,
-            'actions' => $actions,
-        ];
+        return $logs;
     }
-    public function getAssignedApprovers(string $requestorId)
+
+
+    public function getAssignedApprovers(string $ticketId)
     {
-        return $this->ticketRepository->getAssignedApprovers($requestorId);
+        return $this->ticketRepository->getAssignedApprovers($ticketId);
     }
 }

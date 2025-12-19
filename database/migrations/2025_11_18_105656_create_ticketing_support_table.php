@@ -25,7 +25,7 @@ return new class extends Migration
             $table->text('DETAILS')->nullable();
             $table->string('STATUS', 50)->default('OPEN');
             $table->tinyInteger('RATING')->nullable()->unsigned();
-            $table->timestamp('CREATED_AT')->useCurrent();
+            $table->timestamp('created_at')->useCurrent();
             $table->string('HANDLED_BY', 50)->nullable();
             $table->timestamp('HANDLED_AT')->nullable();
             $table->string('CLOSED_BY', 50)->nullable();
@@ -37,7 +37,7 @@ return new class extends Migration
             $table->index('TICKET_ID');
             $table->index('EMPLOYID');
             $table->index('STATUS');
-            $table->index('CREATED_AT');
+            $table->index('created_at');
             $table->index('DELETED_AT');
         });
     }

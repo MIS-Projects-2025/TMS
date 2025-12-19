@@ -2,6 +2,9 @@
 
 namespace App\Repositories;
 
+use App\Models\Hardware;
+use App\Models\Printer;
+use App\Models\Terminal;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -9,6 +12,7 @@ use App\Models\Ticket;
 use App\Models\TicketLogs;
 use App\Models\TicketRemarksHistory;
 use App\Models\User;
+use App\Services\TicketStatusService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -16,9 +20,7 @@ class TicketRepository
 {
     public function getComputerNamesByType(string $type): Collection
     {
-        return DB::connection('inventory')
-            ->table('mis_table')
-            ->select('id', 'hostname as name')
+        return Hardware::select('id', 'hostname as name')
             ->whereRaw('LOWER(category) = ?', [strtolower($type)])
             ->orderBy('hostname')
             ->get();
@@ -46,14 +48,11 @@ class TicketRepository
 
     public function getPrinterNamesByType(string $type): Collection
     {
-        return DB::connection('inventory')
-            ->table('printer_table')
-            ->select('id', 'printer_name as name')
-            ->whereRaw('LOWER(category) = ?', [strtolower($type)])
-            ->whereRaw('LOWER(status) = ?', [strtolower('active')])
-            ->whereRaw('LOWER(printer_name) != ?', [strtolower('n/a')])
+        return Printer::where('category', strtolower($type))
+            ->where('status', 'active')
+            ->where('printer_name', '!=', 'n/a')
             ->orderBy('printer_name')
-            ->get();
+            ->get(['id', 'printer_name']);
     }
 
     public function getConsignedPrinterNames(): Collection
@@ -73,9 +72,7 @@ class TicketRepository
 
     public function getTerminalNames(string $type): Collection
     {
-        return DB::connection('inventory')
-            ->table('terminal_table')
-            ->select('id', 'hostname as name')
+        return Terminal::select('id', 'hostname as name')
             ->whereRaw('LOWER(status) = ?', ['active'])
             ->whereRaw('LOWER(category) = ?', [strtolower($type)])
             ->orderBy('hostname')
@@ -92,12 +89,12 @@ class TicketRepository
         $year = date('Y');
         $prefix = "TKTSPRT-{$year}-";
 
-        $lastTicket = Ticket::where('TICKET_ID', 'like', "{$prefix}%")
-            ->orderBy('TICKET_ID', 'desc')
+        $lastTicket = Ticket::where('ticket_id', 'like', "{$prefix}%")
+            ->orderBy('ticket_id', 'desc')
             ->first();
 
         $newNumber = $lastTicket
-            ? ((int) substr($lastTicket->TICKET_ID, -3)) + 1
+            ? ((int) substr($lastTicket->ticket_id, -3)) + 1
             : 1;
 
         return $prefix . str_pad($newNumber, 3, '0', STR_PAD_LEFT);
@@ -116,7 +113,7 @@ class TicketRepository
 
     public function findTicketById(string $ticketId): ?Ticket
     {
-        return Ticket::where('TICKET_ID', $ticketId)->first();
+        return Ticket::where('ticket_id', $ticketId)->first();
     }
 
     public function updateTicket(Ticket $ticket, array $data): bool
@@ -133,17 +130,19 @@ class TicketRepository
             ->toArray();
     }
 
-    public function getAssignedApprovers(string $requestorId): ?array
+    public function getAssignedApprovers(string $ticketId): ?array
     {
+        $requestorId = Ticket::where('ticket_id', $ticketId)->value('employid');
         $requestor = User::where('EMPLOYID', $requestorId)
-            ->select('PRODLINE')
+            ->select('PRODLINE', 'DEPARTMENT')
+
             ->first();
 
-        if (!$requestor || !$requestor->PRODLINE) {
+        if (!$requestor || !$requestor->PRODLINE || !$requestor->DEPARTMENT) {
             return null;
         }
 
-        $approvers = User::getApproversByProdline($requestor->PRODLINE);
+        $approvers = User::getApproversByProdline($requestor->PRODLINE, $requestor->DEPARTMENT);
 
         return [
             'approvers' => $approvers,
@@ -160,104 +159,9 @@ class TicketRepository
     ): LengthAwarePaginator {
         $query = Ticket::with('handler', 'closer');
 
-        $userId = $filters['userId'] ?? null;
-        $userRoles = $filters['userRoles'] ?? [];
-
-        if ($userId) {
-            $query->where(function ($q) use ($userId, $userRoles) {
-
-                // All non-OnProcess tickets OR OnProcess processed by user
-                $q->where(function ($q2) use ($userId) {
-                    $q2->where('status', '!=', 2)
-                        ->orWhere(function ($q3) use ($userId) {
-                            $q3->where('status', 2)
-                                ->where(function ($sub) use ($userId) {
-                                    $sub->where('EMPLOYID', $userId)
-                                        ->orWhereExists(function ($w) use ($userId) {
-                                            $w->select(DB::raw(1))
-                                                ->from('ticketing_support_workflow as w1')
-                                                ->whereColumn('w1.TICKET_ID', 'ticketing_support.TICKET_ID')
-                                                ->where('w1.ACTION_TYPE', 'ONPROCESS')
-                                                ->where('w1.ACTION_BY', $userId)
-                                                ->whereRaw('w1.ACTION_AT = (
-                                             SELECT MAX(w2.ACTION_AT)
-                                             FROM ticketing_support_workflow w2
-                                             WHERE w2.TICKET_ID = w1.TICKET_ID
-                                             AND w2.ACTION_TYPE = "ONPROCESS"
-                                         )');
-                                        });
-                                });
-                        });
-                });
-
-                // Support staff filter
-                if (in_array('SUPPORT_TECHNICIAN', $userRoles) && !in_array('MIS_SUPERVISOR', $userRoles)) {
-
-                    $q->where(function ($q2) use ($userId, $userRoles) {
-
-                        // Normal request types: handled normally
-                        $q2->where('TYPE_OF_REQUEST', '!=', 'Support Services');
-
-                        // Support Services tickets
-                        $q2->orWhere(function ($q3) use ($userId, $userRoles) {
-                            $q3->where('TYPE_OF_REQUEST', 'Support Services')
-                                ->where(function ($sub) use ($userId, $userRoles) {
-
-                                    // Open/OnProcess/Ongoing → only requestor
-                                    $sub->where(function ($s) use ($userId) {
-                                        $s->where('EMPLOYID', $userId);
-                                    })
-
-                                        // Resolved/Closed → requestor or Senior Approver
-                                        ->orWhere(function ($s) use ($userRoles) {
-                                            if (in_array('SENIOR_APPROVER', $userRoles)) {
-                                                $s->whereIn('status', [4, 5]);
-                                            }
-                                        });
-                                });
-                        });
-                    });
-                }
-            });
-        }
-
-        // Search filter
-        if (!empty($filters['search'])) {
-            $search = $filters['search'];
-            $query->where(function ($q) use ($search) {
-                $q->where('TICKET_ID', 'LIKE', "%{$search}%")
-                    ->orWhere('empname', 'LIKE', "%{$search}%")
-                    ->orWhere('type_of_request', 'LIKE', "%{$search}%")
-                    ->orWhere('request_option', 'LIKE', "%{$search}%")
-                    ->orWhere('item_name', 'LIKE', "%{$search}%");
-            });
-        }
-
-        // Status filter
-        if (!empty($filters['status']) && $filters['status'] !== 'all') {
-            $criticalTime = Carbon::now()->subMinutes(30);
-            $status = $filters['status'];
-
-            if ($status === 'onProcess' || $status == 2) {
-                $query->where('status', 2);
-            } elseif ($status === 'critical') {
-                $query->where('status', 1)->where('created_at', '<=', $criticalTime);
-            } elseif ($status === 'open') {
-                $query->where(function ($q) use ($criticalTime) {
-                    $q->where(function ($q2) use ($criticalTime) {
-                        $q2->where('status', 1)->where('created_at', '>', $criticalTime);
-                    })
-                        ->orWhere('status', 3);
-                });
-            } elseif ($status === 'returned') {
-                $query->whereIn('status', [6, 7]);
-            } elseif (in_array($status, ['resolved', 'closed'])) {
-                $statusMap = ['resolved' => 4, 'closed' => 5];
-                $query->where('status', $statusMap[$status]);
-            } elseif (is_numeric($status)) {
-                $query->where('status', $status);
-            }
-        }
+        $this->applyUserFilters($query, $filters);
+        $this->applySearchFilter($query, $filters['search'] ?? null);
+        $this->applyStatusFilter($query, $filters['status'] ?? null);
 
         // Additional where conditions
         foreach ($whereConditions as $condition) {
@@ -269,112 +173,145 @@ class TicketRepository
             $query->whereIn(...$condition);
         }
 
-        return $query->orderBy($filters['sortField'] ?? 'created_at', $filters['sortOrder'] ?? 'desc')
-            ->paginate($filters['pageSize'] ?? 10, ['*'], 'page', $filters['page'] ?? 1);
+        return $query->orderBy(
+            $filters['sortField'] ?? 'created_at',
+            $filters['sortOrder'] ?? 'desc'
+        )
+            ->paginate(
+                $filters['pageSize'] ?? 10,
+                ['*'],
+                'page',
+                $filters['page'] ?? 1
+            );
     }
 
-    public function getStatusCounts(array $whereConditions = [], array $filters = []): array
+    /**
+     * Get ticket counts per status
+     */
+    public function getStatusCounts(array $filters = [], array $whereConditions = []): array
     {
         $criticalTime = Carbon::now()->subMinutes(30);
-        $userId = $filters['userId'] ?? null;
-        $userRoles = $filters['userRoles'] ?? [];
-
-        $baseQuery = Ticket::query();
+        $query = Ticket::query();
 
         foreach ($whereConditions as $condition) {
-            $baseQuery->where(...$condition);
+            $query->where(...$condition);
         }
 
-        if ($userId) {
-            $baseQuery->where(function ($q) use ($userId, $userRoles) {
-                $q->where(function ($q2) use ($userId, $userRoles) {
-                    // Support Services tickets
-                    $q2->where('TYPE_OF_REQUEST', 'Support Services')
-                        ->where(function ($sub) use ($userId, $userRoles) {
-                            // Open/OnProcess/Ongoing → only requestor
-                            $sub->where('EMPLOYID', $userId)
-                                // Resolved/Closed → only requestor or Senior Approver
-                                ->orWhere(function ($s) use ($userId, $userRoles) {
-                                    if (in_array('SENIOR_APPROVER', $userRoles)) {
-                                        $s->whereIn('status', [4, 5]);
-                                    }
-                                });
-                        });
-                })
-                    // Other request types: normal rules (support staff can see)
-                    ->orWhere('TYPE_OF_REQUEST', '!=', 'Support Services');
-            });
-        }
-
-        // Clone queries for each status
-        $allQuery = clone $baseQuery;
-        $openQuery = clone $baseQuery;
-        $criticalQuery = clone $baseQuery;
-        $onProcessQuery = clone $baseQuery;
-        $resolvedQuery = clone $baseQuery;
-        $closedQuery = clone $baseQuery;
-        $returnedQuery = clone $baseQuery;
+        $this->applyUserFilters($query, $filters);
 
         return [
-            'all' => $allQuery->count(),
-            'open' => $openQuery->where(function ($q) use ($criticalTime) {
+            'all' => (clone $query)->count(),
+            'open' => (clone $query)->where(function ($q) use ($criticalTime) {
                 $q->where(function ($q2) use ($criticalTime) {
                     $q2->where('status', 1)->where('created_at', '>', $criticalTime);
                 })->orWhere('status', 3);
             })->count(),
-            'critical' => $criticalQuery->where('status', 1)->where('created_at', '<=', $criticalTime)->count(),
-            'onProcess' => $onProcessQuery->where('status', 2)->count(),
-            'resolved' => $resolvedQuery->where('status', 4)->count(),
-            'closed' => $closedQuery->where('status', 5)->count(),
-            'returned' => $returnedQuery->whereIn('status', [6, 7])->count(),
+            'critical' => (clone $query)->where('status', 1)->where('created_at', '<=', $criticalTime)->count(),
+            'onProcess' => (clone $query)->where('status', 2)->count(),
+            'resolved' => (clone $query)->where('status', 4)->count(),
+            'closed' => (clone $query)->where('status', 5)->count(),
+            'returned' => (clone $query)->whereIn('status', [6, 7])->count(),
         ];
     }
 
     /**
-     * Get ticket counts by status (basic counting only)
+     * Apply user and role-based filters
      */
-    public function getTicketCounts(array $whereConditions = [], array $whereInConditions = []): array
+    private function applyUserFilters($query, array $filters)
     {
+        $userId = $filters['userId'] ?? null;
+        $userRoles = $filters['userRoles'] ?? [];
+
+        if (!$userId) return;
+
+        $query->where(function ($q) use ($userId, $userRoles) {
+            $q->where(function ($sub) use ($userId) {
+                $sub->where('status', '!=', 2)
+                    ->orWhere(function ($q2) use ($userId) {
+                        $q2->where('status', 2)
+                            ->where(function ($s) use ($userId) {
+                                $s->where('EMPLOYID', $userId)
+                                    ->orWhereExists(function ($w) use ($userId) {
+                                        $w->select(DB::raw(1))
+                                            ->from('ticket_logs as w1')
+                                            ->whereColumn('w1.loggable_id', 'ticketing_support.ticket_id')
+                                            ->where('w1.action_type', 'ONPROCESS')
+                                            ->where('w1.action_by', $userId)
+                                            ->whereRaw('w1.action_at = (
+              SELECT MAX(w2.action_at)
+              FROM ticket_logs w2
+              WHERE w2.loggable_id = w1.loggable_id
+              AND w2.action_type = "ONPROCESS"
+          )');
+                                    });
+                            });
+                    });
+            });
+
+            if (in_array('SUPPORT_TECHNICIAN', $userRoles) && !in_array('MIS_SUPERVISOR', $userRoles)) {
+                $q->where(function ($q2) use ($userId, $userRoles) {
+                    $q2->where('type_of_request', '!=', 'Support Services')
+                        ->orWhere(function ($sub) use ($userId, $userRoles) {
+                            $sub->where('type_of_request', 'Support Services')
+                                ->where(function ($s) use ($userId, $userRoles) {
+                                    $s->where('EMPLOYID', $userId)
+                                        ->orWhere(function ($s2) use ($userRoles) {
+                                            if (in_array('SENIOR_APPROVER', $userRoles)) {
+                                                $s2->whereIn('status', [4, 5]);
+                                            }
+                                        });
+                                });
+                        });
+                });
+            }
+        });
+    }
+
+    /**
+     * Apply search filter
+     */
+    private function applySearchFilter($query, ?string $search)
+    {
+        if (!$search) return;
+
+        $query->where(function ($q) use ($search) {
+            $q->where('ticket_id', 'LIKE', "%{$search}%")
+                ->orWhere('empname', 'LIKE', "%{$search}%")
+                ->orWhere('type_of_request', 'LIKE', "%{$search}%")
+                ->orWhere('request_option', 'LIKE', "%{$search}%")
+                ->orWhere('item_name', 'LIKE', "%{$search}%");
+        });
+    }
+
+    /**
+     * Apply status filter
+     */
+    private function applyStatusFilter($query, $status)
+    {
+        if (!$status || $status === 'all') return;
+
         $criticalTime = Carbon::now()->subMinutes(30);
 
-        $baseQuery = Ticket::query();
-
-        // Apply where conditions
-        foreach ($whereConditions as $condition) {
-            if (count($condition) === 3) {
-                $baseQuery->where($condition[0], $condition[1], $condition[2]);
-            } elseif (count($condition) === 2) {
-                $baseQuery->where($condition[0], $condition[1]);
-            }
-        }
-
-        // Apply whereIn conditions
-        foreach ($whereInConditions as $condition) {
-            if (count($condition) === 2) {
-                $baseQuery->whereIn($condition[0], $condition[1]);
-            }
-        }
-
-        $openQuery = clone $baseQuery;
-        $criticalQuery = clone $baseQuery;
-
-        return [
-            'all' => $baseQuery->count(),
-            'open' => $openQuery->where(function ($q) use ($criticalTime) {
+        if ($status === 'onProcess' || $status == 2) {
+            $query->where('status', 2);
+        } elseif ($status === 'critical') {
+            $query->where('status', 1)->where('created_at', '<=', $criticalTime);
+        } elseif ($status === 'open') {
+            $query->where(function ($q) use ($criticalTime) {
                 $q->where(function ($q2) use ($criticalTime) {
-                    $q2->where('status', 1)
-                        ->where('created_at', '>', $criticalTime);
-                })
-                    ->orWhere('status', 3);
-            })->count(),
-
-            'critical' => $criticalQuery->where('status', 1)->where('created_at', '<=', $criticalTime)->count(),
-            'onProcess' => $baseQuery->clone()->where('status', 2)->count(),
-            'resolved' => $baseQuery->clone()->where('status', 4)->count(),
-            'closed' => $baseQuery->clone()->where('status', 5)->count(),
-            'returned' => $baseQuery->clone()->whereIn('status', [6, 7])->count(),
-        ];
+                    $q2->where('status', 1)->where('created_at', '>', $criticalTime);
+                })->orWhere('status', 3);
+            });
+        } elseif ($status === 'returned') {
+            $query->whereIn('status', [6, 7]);
+        } elseif (in_array($status, ['resolved', 'closed'])) {
+            $statusMap = ['resolved' => 4, 'closed' => 5];
+            $query->where('status', $statusMap[$status]);
+        } elseif (is_numeric($status)) {
+            $query->where('status', $status);
+        }
     }
+
 
     /**
      * Get all tickets for a specific employee
@@ -415,34 +352,75 @@ class TicketRepository
     /**
      * Get ticket logs (activity history) for a specific ticket
      */
-    public function getTicketLogs(string $ticketId): Collection
+
+
+    public function getTicketLogs(string $ticketId, int $perPage = 5): LengthAwarePaginator
     {
         $logs = TicketLogs::with('actor')
-            ->where('TICKET_ID', $ticketId)
+            ->where('loggable_type', Ticket::class)
+            ->where('loggable_id', $ticketId)
             ->orderBy('created_at', 'desc')
-            ->get();
+            ->paginate($perPage);
 
-        return $logs->map(function ($log) {
-            // Decode metadata safely
-            $meta = json_decode($log->METADATA, true);
+        $userFields = ['employid', 'closed_by', 'assigned_to', 'assigned_by', 'handled_by'];
+        $statusFields = ['status']; // Add any numeric status fields here
+
+        // Collect EMPLOYIDs from old_values and new_values
+        $empIds = [];
+        foreach ($logs->items() as $log) {
+            $oldValues = $log->old_values ?? [];
+            $newValues = $log->new_values ?? [];
+
+            foreach ($userFields as $field) {
+                if (!empty($oldValues[$field])) $empIds[] = $oldValues[$field];
+                if (!empty($newValues[$field])) $empIds[] = $newValues[$field];
+            }
+        }
+
+        $users = User::whereIn('EMPLOYID', array_unique($empIds))
+            ->pluck('EMPNAME', 'EMPLOYID')
+            ->toArray();
+
+        $logs->getCollection()->transform(function ($log) use ($users, $userFields, $statusFields) {
+            $oldValues = $log->old_values ?? [];
+            $newValues = $log->new_values ?? [];
+            $metadata  = $log->metadata ?? [];
+
+            // Map EMPLOYID to names
+            foreach ($userFields as $field) {
+                if (!empty($oldValues[$field]) && isset($users[$oldValues[$field]])) {
+                    $oldValues[$field] = $users[$oldValues[$field]];
+                }
+                if (!empty($newValues[$field]) && isset($users[$newValues[$field]])) {
+                    $newValues[$field] = $users[$newValues[$field]];
+                }
+            }
+
+            // Map numeric STATUS to labels
+            foreach ($statusFields as $field) {
+                if (isset($oldValues[$field])) {
+                    $oldValues[$field] = TicketStatusService::getStatusLabelById((int) $oldValues[$field]);
+                }
+                if (isset($newValues[$field])) {
+                    $newValues[$field] = TicketStatusService::getStatusLabelById((int) $newValues[$field]);
+                }
+            }
 
             return [
-                'ID'          => $log->ID,
-                'TICKET_ID'   => $log->TICKET_ID,
-                'ACTION_TYPE' => $log->ACTION_TYPE,
-                'ACTION_BY'   => $log->actor->EMPNAME ?? 'N/A',
-                'ACTION_AT'   => $log->ACTION_AT,
-                'REMARKS'     => $log->REMARKS,
-
-                // Extract old/new status from metadata if present
-                'OLD_STATUS'  => $meta['status_change']['old_status'] ?? null,
-                'NEW_STATUS'  => $meta['status_change']['new_status'] ?? null,
-
-                'CREATED_AT'  => $log->CREATED_AT,
-                'UPDATED_AT'  => $log->UPDATED_AT,
+                'ID'          => $log->id,
+                'ACTION_TYPE' => $log->action_type,
+                'ACTION_BY'   => $log->actor->empname ?? 'N/A',
+                'ACTION_AT'   => $log->action_at,
+                'OLD_VALUES'  => $oldValues,
+                'NEW_VALUES'  => $newValues,
+                'REMARKS'     => $log->remarks,
+                'METADATA'    => $metadata,
             ];
         });
+
+        return $logs;
     }
+
 
     /**
      * Get complete ticket history (logs + remarks combined)
@@ -453,25 +431,6 @@ class TicketRepository
             'logs' => $this->getTicketLogs($ticketId),
 
         ];
-    }
-    /**
-     * Get all MIS support users (supervisors + technicians)
-     */
-    public function getMISSupportUsers(): array
-    {
-        return DB::connection('masterlist')
-            ->table('employee_masterlist')
-            ->select('EMPLOYID as emp_id', 'EMPNAME as empname')
-            ->whereRaw("UPPER(DEPARTMENT) = 'MIS'")
-            ->where(function ($query) {
-                $query->whereRaw("LOWER(JOB_TITLE) LIKE ?", ['%mis support technician%'])
-                    ->orWhere(function ($q) {
-                        $q->whereRaw("LOWER(JOB_TITLE) LIKE ?", ['%mis%'])
-                            ->whereRaw("LOWER(JOB_TITLE) LIKE ?", ['%supervisor%']);
-                    });
-            })
-            ->get()
-            ->toArray();
     }
 
     /**
@@ -496,12 +455,12 @@ class TicketRepository
     public function getResponseTime($userId = null): array
     {
         $query = DB::table('ticketing_support as t')
-            ->join('ticketing_support_workflow as w', 't.TICKET_ID', '=', 'w.TICKET_ID')
+            ->join('ticketing_support_workflow as w', 't.ticket_id', '=', 'w.ticket_id')
             ->select(
                 'w.ACTION_BY',
-                DB::raw('AVG(TIMESTAMPDIFF(MINUTE, t.CREATED_AT, w.ACTION_AT)) AS avg_response_minutes'),
-                DB::raw('MIN(TIMESTAMPDIFF(MINUTE, t.CREATED_AT, w.ACTION_AT)) AS min_response_minutes'),
-                DB::raw('MAX(TIMESTAMPDIFF(MINUTE, t.CREATED_AT, w.ACTION_AT)) AS max_response_minutes')
+                DB::raw('AVG(TIMESTAMPDIFF(MINUTE, t.created_at, w.ACTION_AT)) AS avg_response_minutes'),
+                DB::raw('MIN(TIMESTAMPDIFF(MINUTE, t.created_at, w.ACTION_AT)) AS min_response_minutes'),
+                DB::raw('MAX(TIMESTAMPDIFF(MINUTE, t.created_at, w.ACTION_AT)) AS max_response_minutes')
             )
             ->whereIn('w.ACTION_TYPE', ['HANDLE', 'RESOLVE']); // ONLY valid first response
 
@@ -527,11 +486,11 @@ class TicketRepository
         $query = DB::table('ticketing_support as t')
             ->select(
                 DB::raw('DATE(t.created_at) as day'),
-                DB::raw('COUNT(DISTINCT t.TICKET_ID) as total')
+                DB::raw('COUNT(DISTINCT t.ticket_id) as total')
             );
 
         if ($userId) {
-            $query->join('ticketing_support_workflow as w', 't.TICKET_ID', '=', 'w.TICKET_ID')
+            $query->join('ticketing_support_workflow as w', 't.ticket_id', '=', 'w.ticket_id')
                 ->where('w.ACTION_BY', $userId);
         }
 
@@ -545,7 +504,7 @@ class TicketRepository
     public function getTicketsHandled($userId = null): array
     {
         $query = DB::table('ticketing_support_workflow')
-            ->select('ACTION_BY', DB::raw('COUNT(DISTINCT TICKET_ID) as total'))
+            ->select('ACTION_BY', DB::raw('COUNT(DISTINCT ticket_id) as total'))
             ->where('ACTION_TYPE', 'RESOLVE');
 
         if ($userId) {
@@ -574,11 +533,11 @@ class TicketRepository
 
         if ($userId) {
             // Count tickets handled by this user (ANY action)
-            $totalQuery->join('ticketing_support_workflow as w', 't.TICKET_ID', '=', 'w.TICKET_ID')
+            $totalQuery->join('ticketing_support_workflow as w', 't.ticket_id', '=', 'w.ticket_id')
                 ->where('w.ACTION_BY', $userId);
         }
 
-        $total = $totalQuery->distinct('t.TICKET_ID')->count('t.TICKET_ID');
+        $total = $totalQuery->distinct('t.ticket_id')->count('t.ticket_id');
 
 
         // RESOLVED TICKETS
@@ -589,7 +548,7 @@ class TicketRepository
             $resolvedQuery->where('w.ACTION_BY', $userId);
         }
 
-        $resolved = $resolvedQuery->distinct('w.TICKET_ID')->count('w.TICKET_ID');
+        $resolved = $resolvedQuery->distinct('w.ticket_id')->count('w.ticket_id');
 
 
         // UNHANDLED
@@ -601,7 +560,7 @@ class TicketRepository
 
         // AVG RESPONSE TIME
         $avgResponseQuery = DB::table('ticketing_support as t')
-            ->join('ticketing_support_workflow as w', 't.TICKET_ID', '=', 'w.TICKET_ID')
+            ->join('ticketing_support_workflow as w', 't.ticket_id', '=', 'w.ticket_id')
             ->where('w.ACTION_TYPE', 'RESOLVE');
 
         if ($userId) {
@@ -627,11 +586,11 @@ class TicketRepository
         $query = DB::table('ticketing_support as t')
             ->select(
                 't.TYPE_OF_REQUEST',
-                DB::raw('COUNT(DISTINCT t.TICKET_ID) as issue_count')
+                DB::raw('COUNT(DISTINCT t.ticket_id) as issue_count')
             );
 
         if ($userId) {
-            $query->join('ticketing_support_workflow as w', 't.TICKET_ID', '=', 'w.TICKET_ID')
+            $query->join('ticketing_support_workflow as w', 't.ticket_id', '=', 'w.ticket_id')
                 ->where('w.ACTION_BY', $userId);
         }
 
@@ -645,11 +604,11 @@ class TicketRepository
     public function getOptionsPerRequest($userId = null): array
     {
         $query = DB::table('ticketing_support as t')
-            ->join('ticketing_support_workflow as w', 't.TICKET_ID', '=', 'w.TICKET_ID')
+            ->join('ticketing_support_workflow as w', 't.ticket_id', '=', 'w.ticket_id')
             ->select(
                 't.REQUEST_OPTION',
-                DB::raw('AVG(TIMESTAMPDIFF(MINUTE, t.CREATED_AT, w.ACTION_AT)) as avg_minutes'),
-                DB::raw('COUNT(DISTINCT t.TICKET_ID) as count')
+                DB::raw('AVG(TIMESTAMPDIFF(MINUTE, t.created_at, w.ACTION_AT)) as avg_minutes'),
+                DB::raw('COUNT(DISTINCT t.ticket_id) as count')
             )
             ->where('w.ACTION_TYPE', 'RESOLVE');
 
@@ -667,11 +626,11 @@ class TicketRepository
     public function getAvgResponseTimePerIssue($userId = null): array
     {
         $query = DB::table('ticketing_support as t')
-            ->join('ticketing_support_workflow as w', 't.TICKET_ID', '=', 'w.TICKET_ID')
+            ->join('ticketing_support_workflow as w', 't.ticket_id', '=', 'w.ticket_id')
             ->select(
                 't.TYPE_OF_REQUEST',
-                DB::raw('AVG(TIMESTAMPDIFF(MINUTE, t.CREATED_AT, w.ACTION_AT)) as avg_minutes'),
-                DB::raw('COUNT(DISTINCT t.TICKET_ID) as count')
+                DB::raw('AVG(TIMESTAMPDIFF(MINUTE, t.created_at, w.ACTION_AT)) as avg_minutes'),
+                DB::raw('COUNT(DISTINCT t.ticket_id) as count')
             )
             ->where('w.ACTION_TYPE', 'RESOLVE');
 
@@ -692,11 +651,11 @@ class TicketRepository
         $query = DB::table('ticketing_support as t')
             ->select(
                 't.TYPE_OF_REQUEST',
-                DB::raw('COUNT(DISTINCT t.TICKET_ID) as count')
+                DB::raw('COUNT(DISTINCT t.ticket_id) as count')
             );
 
         if ($userId) {
-            $query->join('ticketing_support_workflow as w', 't.TICKET_ID', '=', 'w.TICKET_ID')
+            $query->join('ticketing_support_workflow as w', 't.ticket_id', '=', 'w.ticket_id')
                 ->where('w.ACTION_BY', $userId);
         }
 
@@ -721,7 +680,7 @@ class TicketRepository
     public function getAvgRatingPerEmployee($userId = null): array
     {
         $query = DB::table('ticketing_support as t')
-            ->join('ticketing_support_workflow as w', 't.TICKET_ID', '=', 'w.TICKET_ID')
+            ->join('ticketing_support_workflow as w', 't.ticket_id', '=', 'w.ticket_id')
             ->select(
                 'w.ACTION_BY',
                 DB::raw('AVG(t.RATING) as avg_rating'),

@@ -61,15 +61,15 @@ class User extends Authenticatable
             ->whereNull('read_at')
             ->count();
     }
-    // In User model
-    public static function getApproversByProdline(string $prodline): array
+
+    public static function getApproversByProdline(string $prodline, string $department): array
     {
-        // Get all APPROVER1 and APPROVER2 EMPLOYIDs in this PRODLINE
+        // Get all APPROVER1 and APPROVER2 EMPLOYIDs in this PRODLINE + DEPARTMENT
         $approverIds = self::where('PRODLINE', $prodline)
-            ->whereNotNull('APPROVER1')
-            ->orWhere(function ($q) use ($prodline) {
-                $q->where('PRODLINE', $prodline)
-                    ->whereNotNull('APPROVER2');
+            ->where('DEPARTMENT', $department)
+            ->where(function ($q) {
+                $q->whereNotNull('APPROVER1')
+                    ->orWhereNotNull('APPROVER2');
             })
             ->get(['APPROVER1', 'APPROVER2']);
 
@@ -93,7 +93,7 @@ class User extends Authenticatable
         // Return as array suitable for select/options
         return $approvers->map(fn($a) => [
             'EMPLOYID' => $a->EMPLOYID,
-            'EMPNAME' => $a->EMPNAME,
+            'EMPNAME'  => $a->EMPNAME,
         ])->toArray();
     }
 }

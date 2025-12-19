@@ -17,8 +17,9 @@ const TicketLogs = ({ history = [], loading = false }) => {
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const scrollContainerRef = useRef(null);
     const ITEMS_PER_PAGE = 5;
+    console.log(history);
 
-    // Initialize with first 5 items
+    // Initialize first page
     useEffect(() => {
         if (history.length > 0) {
             const initialItems = history.slice(0, ITEMS_PER_PAGE);
@@ -35,10 +36,8 @@ const TicketLogs = ({ history = [], loading = false }) => {
     // Load more items
     const loadMore = () => {
         if (isLoadingMore || !hasMore) return;
-
         setIsLoadingMore(true);
 
-        // Simulate a small delay for better UX
         setTimeout(() => {
             const nextPage = currentPage + 1;
             const startIndex = currentPage * ITEMS_PER_PAGE;
@@ -52,18 +51,18 @@ const TicketLogs = ({ history = [], loading = false }) => {
             } else {
                 setHasMore(false);
             }
-
             setIsLoadingMore(false);
         }, 300);
     };
 
-    // Handle scroll event
+    // Scroll handler
     const handleScroll = (e) => {
         const { scrollTop, scrollHeight, clientHeight } = e.target;
-        const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
-
-        // Load more when user scrolls to 80% of the container
-        if (scrollPercentage > 0.8 && hasMore && !isLoadingMore) {
+        if (
+            (scrollTop + clientHeight) / scrollHeight > 0.8 &&
+            hasMore &&
+            !isLoadingMore
+        ) {
             loadMore();
         }
     };
@@ -76,6 +75,7 @@ const TicketLogs = ({ history = [], loading = false }) => {
             CLOSE: "purple",
             CANCEL: "red",
             RETURN: "yellow",
+            ASSIGN: "cyan",
         };
         return colors[actionType] || "default";
     };
@@ -88,8 +88,9 @@ const TicketLogs = ({ history = [], loading = false }) => {
             CLOSE: <CheckCircleOutlined />,
             CANCEL: <StopOutlined />,
             RETURN: <RollbackOutlined />,
+            ASSIGN: <HistoryOutlined />,
         };
-        return icons[actionType] || <HistoryOutlined />;
+        return icons[actionType] || <FileTextOutlined />;
     };
 
     if (loading) {
@@ -123,56 +124,103 @@ const TicketLogs = ({ history = [], loading = false }) => {
             <Timeline
                 className="ml-4"
                 items={displayedItems.map((item, index) => {
-                    // Determine the color for the dot: if action, use new status color
-                    const dotColor = item.NEW_STATUS_COLOR || "gray";
+                    const dotColor =
+                        item.NEW_STATUS_COLOR ||
+                        getActionColor(item.ACTION_TYPE);
+
+                    // Dynamic field changes
+                    // Dynamic field changes
+                    const changes = [];
+                    if (item.OLD_VALUES && item.NEW_VALUES) {
+                        Object.keys(item.NEW_VALUES).forEach((key) => {
+                            let oldVal = item.OLD_VALUES[key] ?? "";
+                            let newVal = item.NEW_VALUES[key] ?? "—";
+
+                            // Determine if this field should be treated as a date
+                            const isDateField =
+                                key.toLowerCase().endsWith("_at") ||
+                                key.toLowerCase().includes("date");
+
+                            if (isDateField) {
+                                const oldDate = dayjs(oldVal);
+                                const newDate = dayjs(newVal);
+                                if (oldDate.isValid())
+                                    oldVal = oldDate.format(
+                                        "MMM DD, YYYY - hh:mm A"
+                                    );
+                                if (newDate.isValid())
+                                    newVal = newDate.format(
+                                        "MMM DD, YYYY - hh:mm A"
+                                    );
+                            }
+
+                            // Only push changes if values actually differ
+                            if (oldVal !== newVal) {
+                                changes.push({ key, oldVal, newVal });
+                            }
+                        });
+                    }
 
                     return {
                         color: dotColor,
-                        dot:
-                            item.type === "action" ? (
-                                getActionIcon(item.ACTION_TYPE)
-                            ) : (
-                                <FileTextOutlined />
-                            ),
+                        dot: getActionIcon(item.ACTION_TYPE),
                         children: (
                             <div className="pb-4" key={index}>
+                                {/* Action Tag & Timestamp */}
                                 <div className="flex items-center gap-2 mt-4">
-                                    {/* Action Tag */}
                                     <Tag color={dotColor}>
                                         {item.ACTION_TYPE || "Remark"}
                                     </Tag>
-
-                                    {/* Timestamp */}
                                     <span className="text-xs text-base-500">
-                                        {dayjs(
-                                            item.ACTION_AT || item.timestamp
-                                        ).format("MMM DD, YYYY - hh:mm A")}
+                                        {item.ACTION_AT
+                                            ? dayjs(item.ACTION_AT).format(
+                                                  "MMM DD, YYYY - hh:mm A"
+                                              )
+                                            : "—"}
                                     </span>
                                 </div>
-
-                                {/* Status transition */}
-                                {item.OLD_STATUS_LABEL &&
-                                    item.NEW_STATUS_LABEL && (
-                                        <div className="mt-2 flex items-center gap-2 text-sm">
-                                            <Tag
-                                                color={
-                                                    item.OLD_STATUS_COLOR ||
-                                                    "gray"
-                                                }
-                                            >
-                                                {item.OLD_STATUS_LABEL}
-                                            </Tag>
-                                            <span>→</span>
-                                            <Tag
-                                                color={
-                                                    item.NEW_STATUS_COLOR ||
-                                                    "gray"
-                                                }
-                                            >
-                                                {item.NEW_STATUS_LABEL}
-                                            </Tag>
+                                {/* Dynamic Changes */}
+                                {changes.length > 0 && (
+                                    <div className="mt-2 flex flex-col text-sm gap-1">
+                                        {/* Header Row */}
+                                        <div className="grid grid-cols-3 gap-2 font-semibold text-gray-500">
+                                            <span>Field</span>
+                                            <span>Old Value</span>
+                                            <span>New Value</span>
                                         </div>
-                                    )}
+
+                                        {/* Divider */}
+                                        <div className="border-b border-gray-200"></div>
+
+                                        {/* Values */}
+                                        {changes.map((c, i) => (
+                                            <div
+                                                key={i}
+                                                className="grid grid-cols-3 gap-2 items-center"
+                                            >
+                                                {/* Label column */}
+                                                <Tag
+                                                    color="blue"
+                                                    className="truncate"
+                                                >
+                                                    {c.key
+                                                        .replace(/_/g, " ")
+                                                        .toUpperCase()}
+                                                </Tag>
+
+                                                {/* Old Value column */}
+                                                <span className="truncate">
+                                                    {c.oldVal || "—"}
+                                                </span>
+
+                                                {/* New Value column */}
+                                                <span className="truncate">
+                                                    {c.newVal || "—"}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
 
                                 {/* Remarks */}
                                 {item.REMARKS && (
@@ -180,6 +228,8 @@ const TicketLogs = ({ history = [], loading = false }) => {
                                         {item.REMARKS}
                                     </div>
                                 )}
+
+                                {/* Action By */}
                                 {item.ACTION_BY && (
                                     <div className="text-xs text-base-500 mt-1">
                                         By: {item.ACTION_BY}
@@ -191,7 +241,7 @@ const TicketLogs = ({ history = [], loading = false }) => {
                 })}
             />
 
-            {/* Loading More Indicator */}
+            {/* Loading More */}
             {isLoadingMore && (
                 <div className="text-center py-4">
                     <Spin size="small" />
@@ -201,7 +251,7 @@ const TicketLogs = ({ history = [], loading = false }) => {
                 </div>
             )}
 
-            {/* End of List Indicator */}
+            {/* End of List */}
             {!hasMore && displayedItems.length > 0 && (
                 <div className="text-center py-4 text-xs text-gray-400 border-t border-gray-200">
                     No more history to load

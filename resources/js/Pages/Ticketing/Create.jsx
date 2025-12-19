@@ -44,7 +44,7 @@ const Create = () => {
 
     return (
         <AuthenticatedLayout>
-                  <Head title="Generate Ticket" />
+            <Head title="Generate Ticket" />
             <div className="text-center px-6 mb-6">
                 <div className="flex items-center justify-center gap-3 mb-1">
                     <h1 className="text-3xl font-bold">MIS Ticketing System</h1>

@@ -6,13 +6,20 @@ use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\NotificationUser;
+use App\Services\UserRoleService;
 
 class AuthMiddleware
 {
+    protected UserRoleService $userRoleService;
+
+    public function __construct(UserRoleService $userRoleService)
+    {
+        $this->userRoleService = $userRoleService;
+    }
+
     public function handle(Request $request, Closure $next)
     {
-
-        // 1️⃣ Get token from query or session
+        // 1️⃣ Get token from query, session, or cookie
         $tokenFromQuery   = $request->query('key');
         $tokenFromSession = session('emp_data.token');
         $tokenFromCookie  = $request->cookie('sso_token');
@@ -32,7 +39,7 @@ class AuthMiddleware
             return $next($request);
         }
 
-        // 4️⃣ Fetch user from authify (only if session missing or token mismatch)
+        // 4️⃣ Fetch user from authify if session missing or token mismatch
         $currentUser = DB::connection('authify')
             ->table('authify_sessions')
             ->where('token', $token)
@@ -45,7 +52,7 @@ class AuthMiddleware
             return redirect("https://192.168.2.221/authify/public/login?redirect={$redirectUrl}");
         }
 
-        // 5️⃣ Assign system roles
+        // 5️⃣ Determine system roles (used in middleware like SupportMiddleware)
         $systemRoles = [];
         $jobTitle = $currentUser->emp_jobtitle ?? '';
 
@@ -61,20 +68,10 @@ class AuthMiddleware
             $systemRoles[] = 'support';
         }
 
-        $seniorApproverIds = DB::connection('mysql')
-            ->table('senior_support_approver')
-            ->pluck('EMPLOYID')
-            ->toArray();
+        // 6️⃣ Determine user roles (metadata) using UserRoleService
+        $userRoles = $this->userRoleService->getUserAccountTypes((array)$currentUser);
 
-        if (in_array($currentUser->emp_id, $seniorApproverIds)) {
-            $systemRoles[] = 'senior approver';
-        }
-
-        if (empty($systemRoles)) {
-            $systemRoles[] = 'N/A';
-        }
-
-        // 6️⃣ Set Laravel session
+        // 7️⃣ Set Laravel session with separate role arrays
         session()->put('emp_data', [
             'token'            => $currentUser->token,
             'emp_id'           => $currentUser->emp_id,
@@ -87,9 +84,10 @@ class AuthMiddleware
             'emp_station'      => $currentUser->emp_station ?? null,
             'generated_at'     => $currentUser->generated_at,
             'emp_system_roles' => $systemRoles,
+            'emp_user_roles'   => $userRoles,
         ]);
 
-        // 7️⃣ Ensure NotificationUser exists
+        // 8️⃣ Ensure NotificationUser exists
         $user = NotificationUser::firstOrCreate(
             ['emp_id' => $currentUser->emp_id],
             [
@@ -98,10 +96,10 @@ class AuthMiddleware
             ]
         );
 
-        // 8️⃣ Set user resolver for broadcasting
+        // 9️⃣ Set user resolver for broadcasting
         $request->setUserResolver(fn() => $user);
 
-        // 9️⃣ Remove key from URL after successful auth
+        // 🔟 Remove key from URL after successful auth
         if ($tokenFromQuery) {
             return redirect($request->url());
         }

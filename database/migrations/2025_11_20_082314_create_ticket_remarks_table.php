@@ -18,7 +18,7 @@ return new class extends Migration
             $table->text('REMARK_TEXT'); // REMARK_TEXT
             $table->string('OLD_STATUS')->nullable(); // OLD_STATUS
             $table->string('NEW_STATUS')->nullable(); // NEW_STATUS
-            $table->timestamps(); // CREATED_AT and UPDATED_AT
+            $table->timestamps(); // created_at and UPDATED_AT
 
             // Index for better performance - use consistent column names
             $table->index('TICKET_ID');

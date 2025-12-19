@@ -3,7 +3,7 @@ import { Tooltip } from "antd";
 
 const DurationCell = ({ record }) => {
     const [secondsOpen, setSecondsOpen] = useState(() => {
-        const createdAt = new Date(record.CREATED_AT.replace(" ", "T"));
+        const createdAt = new Date(record.created_at.replace(" ", "T"));
         return isNaN(createdAt)
             ? 0
             : Math.floor((new Date() - createdAt) / 1000);
@@ -13,7 +13,7 @@ const DurationCell = ({ record }) => {
         if (Number(record.STATUS) !== 1) return;
 
         const interval = setInterval(() => {
-            const createdAt = new Date(record.CREATED_AT.replace(" ", "T"));
+            const createdAt = new Date(record.created_at.replace(" ", "T"));
             const secs = isNaN(createdAt)
                 ? 0
                 : Math.floor((new Date() - createdAt) / 1000);
@@ -21,7 +21,7 @@ const DurationCell = ({ record }) => {
         }, 1000); // update every second
 
         return () => clearInterval(interval);
-    }, [record.CREATED_AT, record.STATUS]);
+    }, [record.created_at, record.STATUS]);
     if (Number(record.STATUS) !== 1) return "-";
     const hours = Math.floor(secondsOpen / 3600);
     const minutes = Math.floor((secondsOpen % 3600) / 60);

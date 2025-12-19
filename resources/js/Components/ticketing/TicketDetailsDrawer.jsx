@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { Drawer, Tag } from "antd";
+import { Drawer, Tag, Select, message, Tooltip } from "antd";
 import dayjs from "dayjs";
 import {
     UserOutlined,
     TagsOutlined,
-    FileTextOutlined,
     FieldTimeOutlined,
     AppstoreOutlined,
     ApartmentOutlined,
@@ -13,7 +12,8 @@ import {
     StopOutlined,
     HistoryOutlined,
     StarOutlined,
-    ClockCircleOutlined,
+    UserAddOutlined,
+    InfoCircleOutlined,
 } from "@ant-design/icons";
 import { TicketIcon } from "lucide-react";
 import TicketLogsModal from "./TicketLogsModal";
@@ -26,29 +26,31 @@ const TicketDetailsDrawer = ({
     action,
     ticketLogs = [],
     loadingHistory = false,
+    assignedApprovers = [],
 }) => {
-    console.log("Ticket details:", ticket);
     const [remarks, setRemarks] = useState("");
     const [currentAction, setCurrentAction] = useState("");
     const [rating, setRating] = useState(0);
     const [logsModalOpen, setLogsModalOpen] = useState(false);
+    const [assignedEmployee, setAssignedEmployee] = useState(null);
 
     useEffect(() => {
         if (ticket) {
             setRemarks(ticket.remarks || "");
-            if (ticket.RATING) setRating(ticket.RATING);
+            setRating(ticket.rating || 0);
+            setAssignedEmployee(ticket.assigned_to || null);
+            setCurrentAction("");
         }
     }, [ticket]);
 
     if (!ticket) return null;
-    const calcDuration = () => {
-        const created = new Date(ticket.CREATED_AT.replace(" ", "T"));
 
-        // Use CLOSED_AT first, then HANDLED_AT, then fallback to now
-        const endTime = ticket.CLOSED_AT
-            ? new Date(ticket.CLOSED_AT.replace(" ", "T"))
-            : ticket.HANDLED_AT
-            ? new Date(ticket.HANDLED_AT.replace(" ", "T"))
+    const calcDuration = () => {
+        const created = new Date(ticket.created_at.replace(" ", "T"));
+        const endTime = ticket.closed_at
+            ? new Date(ticket.closed_at.replace(" ", "T"))
+            : ticket.handled_at
+            ? new Date(ticket.handled_at.replace(" ", "T"))
             : new Date();
 
         const mins = Math.floor((endTime - created) / 60000);
@@ -58,73 +60,90 @@ const TicketDetailsDrawer = ({
         return hours > 0 ? `${hours}h ${m}m` : `${mins}m`;
     };
 
-    // Combine logs (all history is in logs now)
-    const combinedHistory = ticketLogs
-        .map((log) => ({
-            ...log,
-            timestamp: log.ACTION_AT || log.CREATED_AT,
-            type: "log",
-        }))
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
     const handleCloseDrawer = () => {
-        setRemarks(ticket.remarks || "");
-        setRating(ticket.RATING || 0);
+        setRemarks("");
+        setRating(0);
         setCurrentAction("");
+        setAssignedEmployee(null);
         onClose();
     };
 
-    const hasExistingRating = ticket.RATING && ticket.RATING > 0;
-    const isViewAction =
-        Array.isArray(action?.actions) &&
-        action.actions.length === 1 &&
-        action.actions[0].toLowerCase() === "view";
+    const handleActionClick = (ticketId, actionType) => {
+        const actionLower = actionType.toLowerCase();
+        if (
+            (actionLower === "assign" || actionLower === "resolve") &&
+            assignedEmployee
+        ) {
+            handleButtonClick(
+                ticketId,
+                actionType,
+                remarks,
+                rating,
+                assignedEmployee
+            );
+        } else {
+            handleButtonClick(ticketId, actionType, remarks, rating);
+        }
+
+        // Reset assignment after action
+        setAssignedEmployee(null);
+    };
+
+    const hasExistingRating = ticket.rating > 0;
+    const actionStr =
+        Array.isArray(action?.actions) && action.actions.length > 0
+            ? action.actions[0].toLowerCase()
+            : "";
+    const isViewAction = actionStr === "view";
+
+    const showEmployeeAssignment =
+        ["assign", "resolve"].includes(actionStr) ||
+        ["RESOLVED", "ONGOING"].includes(ticket.STATUS);
+    const readEmployeeAssignment = !showEmployeeAssignment;
     return (
         <Drawer
             title={
                 <div className="flex justify-between items-center w-full">
                     <div className="flex items-center gap-4">
                         <TicketIcon className="w-6 h-6 text-blue-500" />
-                        <span className="font-semibold text-lg ">
-                            {ticket.TICKET_ID}
+                        <span className="font-semibold text-lg">
+                            {ticket.ticket_id}
                         </span>
 
-                        {combinedHistory.length > 0 && (
+                        {ticketLogs.length > 0 && (
                             <button
                                 className="flex items-center gap-2 bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full hover:bg-blue-200 transition-colors duration-150"
                                 onClick={() => setLogsModalOpen(true)}
                             >
                                 <HistoryOutlined className="w-4 h-4" />
-                                {combinedHistory.length}
+                                {ticketLogs.length}
                             </button>
                         )}
                     </div>
-                    {/* Display existing rating if it exists */}
+
                     {hasExistingRating && (
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <span className="font-semibold text-base-800 flex items-center gap-2">
-                                    Requestor Rating:
-                                </span>
-                                <div className="rating rating-xs rating-disabled">
-                                    {[1, 2, 3, 4, 5].map((star) => (
-                                        <input
-                                            key={star}
-                                            type="radio"
-                                            name="rating-display"
-                                            className="mask mask-star-2 bg-orange-400"
-                                            checked={ticket.RATING === star}
-                                            readOnly
-                                        />
-                                    ))}
-                                </div>
-                                <span className="text-base-600 font-medium">
-                                    ({ticket.RATING}/5)
-                                </span>
+                        <div className="flex items-center gap-2">
+                            <span className="font-semibold text-base-800 flex items-center gap-2">
+                                Requestor Rating:
+                            </span>
+                            <div className="rating rating-xs rating-disabled">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                    <input
+                                        key={star}
+                                        type="radio"
+                                        name="rating-display"
+                                        className="mask mask-star-2 bg-orange-400"
+                                        checked={ticket.rating === star}
+                                        readOnly
+                                    />
+                                ))}
                             </div>
+                            <span className="text-base-600 font-medium">
+                                ({ticket.rating}/5)
+                            </span>
                         </div>
                     )}
-                    {/* Action Buttons */}
+
                     <div className="flex gap-2">
                         {currentAction.toLowerCase() !== "close" &&
                             Array.isArray(action?.actions) &&
@@ -170,12 +189,13 @@ const TicketDetailsDrawer = ({
                                             onClick={() => {
                                                 if (type === "close") {
                                                     setCurrentAction("close");
+                                                } else if (type === "ongoing") {
+                                                    setCurrentAction(type);
                                                 } else {
-                                                    handleButtonClick(
-                                                        ticket.TICKET_ID,
-                                                        a,
-                                                        remarks,
-                                                        rating
+                                                    // Resolve, Return, Cancel work directly
+                                                    handleActionClick(
+                                                        ticket.ticket_id,
+                                                        a
                                                     );
                                                 }
                                             }}
@@ -188,7 +208,6 @@ const TicketDetailsDrawer = ({
                                     );
                                 })}
 
-                        {/* Show Confirm Close only if Close is clicked */}
                         {currentAction.toLowerCase() === "close" && (
                             <button
                                 className={`flex items-center gap-1 px-3 py-1 text-white rounded-lg text-sm shadow-sm ${
@@ -200,7 +219,7 @@ const TicketDetailsDrawer = ({
                                 onClick={() => {
                                     if (rating <= 0) return;
                                     handleButtonClick(
-                                        ticket.TICKET_ID,
+                                        ticket.ticket_id,
                                         "Close",
                                         remarks,
                                         rating
@@ -214,6 +233,26 @@ const TicketDetailsDrawer = ({
                                 Confirm Close
                             </button>
                         )}
+
+                        {currentAction.toLowerCase() === "ongoing" && (
+                            <button
+                                className={`flex items-center gap-1 px-3 py-1 text-white rounded-lg text-sm shadow-sm bg-green-500 hover:bg-green-600 transition-colors duration-150`}
+                                onClick={() => {
+                                    handleActionClick(
+                                        ticket.ticket_id,
+                                        currentAction.charAt(0).toUpperCase() +
+                                            currentAction.slice(1)
+                                    );
+                                    setCurrentAction("");
+                                    setRemarks(ticket.remarks || "");
+                                }}
+                            >
+                                <CheckCircleOutlined className="w-4 h-4" />
+                                Confirm{" "}
+                                {currentAction.charAt(0).toUpperCase() +
+                                    currentAction.slice(1)}
+                            </button>
+                        )}
                     </div>
                 </div>
             }
@@ -222,62 +261,21 @@ const TicketDetailsDrawer = ({
             width={800}
             styles={{ body: { padding: 0 } }}
         >
-            {/* Status, Date, Duration */}
+            {/* Ticket Tags */}
             <div className="flex flex-wrap gap-4 mt-4 ml-4">
                 <Tag color={ticket.status_color || "default"}>
                     {ticket.status_label || "-"}
                 </Tag>
                 <Tag color={ticket.status_color || "default"}>
                     Created At:{" "}
-                    {dayjs(ticket.CREATED_AT).format("MMM DD, YYYY - hh:mm A")}
+                    {dayjs(ticket.created_at).format("MMM DD, YYYY - hh:mm A")}
                 </Tag>
                 <Tag color={ticket.status_color || "default"}>
                     <FieldTimeOutlined /> {calcDuration()}
                 </Tag>
             </div>
-            <div className="p-5 space-y-6">
-                {/* Ticket Timeline */}
-                {(ticket.handled_by_name && ticket.HANDLED_AT) ||
-                (ticket.closed_by_name && ticket.CLOSED_AT) ? (
-                    <div>
-                        <h3 className="font-semibold text-base-700 mb-3">
-                            Ticket Timeline
-                        </h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-2">
-                            {ticket.handled_by_name && ticket.HANDLED_AT && (
-                                <div>
-                                    <div className="text-base-500 text-md flex items-center gap-2">
-                                        <ClockCircleOutlined /> Handled By
-                                    </div>
-                                    <div className="font-semibold text-base-800">
-                                        {ticket.handled_by_name}
-                                    </div>
-                                    <div className="text-base-500 text-sm mt-1">
-                                        {dayjs(ticket.HANDLED_AT).format(
-                                            "MMM DD, YYYY - hh:mm A"
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-                            {ticket.closed_by_name && ticket.CLOSED_AT && (
-                                <div>
-                                    <div className="text-base-500 text-md flex items-center gap-2">
-                                        <CheckCircleOutlined /> Closed By
-                                    </div>
-                                    <div className="font-semibold text-base-800">
-                                        {ticket.closed_by_name}
-                                    </div>
-                                    <div className="text-base-500 text-sm mt-1">
-                                        {dayjs(ticket.CLOSED_AT).format(
-                                            "MMM DD, YYYY - hh:mm A"
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                ) : null}
 
+            <div className="p-5 space-y-6">
                 {/* Employee Details */}
                 <div>
                     <h3 className="font-semibold text-base-700 mb-3">
@@ -289,7 +287,7 @@ const TicketDetailsDrawer = ({
                                 <UserOutlined /> Requestor
                             </div>
                             <div className="font-semibold text-base-800">
-                                {ticket.EMPLOYID} - {ticket.EMPNAME}
+                                {ticket.employid} - {ticket.empname}
                             </div>
                         </div>
                         <div>
@@ -297,23 +295,7 @@ const TicketDetailsDrawer = ({
                                 <ApartmentOutlined /> Department
                             </div>
                             <div className="font-semibold text-base-800">
-                                {ticket.DEPARTMENT || "-"}
-                            </div>
-                        </div>
-                        <div>
-                            <div className="text-base-500 text-md flex items-center gap-2">
-                                <ApartmentOutlined /> Station
-                            </div>
-                            <div className="font-semibold text-base-800">
-                                {ticket.STATION || "-"}
-                            </div>
-                        </div>
-                        <div>
-                            <div className="text-base-500 text-md flex items-center gap-2">
-                                <ApartmentOutlined /> Prodline
-                            </div>
-                            <div className="font-semibold text-base-800">
-                                {ticket.PRODLINE || "-"}
+                                {ticket.department || "-"}
                             </div>
                         </div>
                     </div>
@@ -330,7 +312,7 @@ const TicketDetailsDrawer = ({
                                 <TagsOutlined /> Request Type
                             </div>
                             <div className="font-semibold text-base-800">
-                                {ticket.TYPE_OF_REQUEST}
+                                {ticket.type_of_request}
                             </div>
                         </div>
                         <div>
@@ -338,33 +320,55 @@ const TicketDetailsDrawer = ({
                                 <AppstoreOutlined /> Request Option
                             </div>
                             <div className="font-semibold text-base-800">
-                                {ticket.REQUEST_OPTION}
-                            </div>
-                        </div>
-                        {ticket.ITEM_NAME && (
-                            <div className="sm:col-span-2">
-                                <div className="text-base-500 text-md flex items-center gap-2">
-                                    <FileTextOutlined /> {ticket.REQUEST_OPTION}{" "}
-                                    Name
-                                </div>
-                                <div className="font-semibold text-base-800">
-                                    {ticket.ITEM_NAME || "-"}
-                                </div>
-                            </div>
-                        )}
-                        <div className="sm:col-span-2">
-                            <div className="text-base-500 text-md mb-1 flex items-center gap-2">
-                                <FileTextOutlined /> Details
-                            </div>
-                            <div className="font-semibold text-base-800">
-                                {ticket.DETAILS || "No details provided."}
+                                {ticket.request_option}
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Remarks & Rating for actions */}
-
+                {/* Assign Employee */}
+                {showEmployeeAssignment && (
+                    <div className="mt-4">
+                        <label className="block">
+                            <span className="font-semibold text-base-700 flex items-center gap-2 mb-1">
+                                <UserAddOutlined />
+                                {ticket.assigned_to
+                                    ? "Reassign Ticket to Another Employee"
+                                    : "Assign Ticket to an Employee (Optional)"}
+                                <Tooltip title="If no employee is assigned, the requestor will be responsible for closing the ticket.">
+                                    <InfoCircleOutlined className="text-gray-400 ml-1" />
+                                </Tooltip>
+                            </span>
+                        </label>
+                        <Select
+                            showSearch
+                            placeholder="Select an employee"
+                            className="w-full"
+                            value={assignedEmployee}
+                            onChange={setAssignedEmployee}
+                            allowClear
+                            options={assignedApprovers.map((emp) => ({
+                                value: emp.EMPLOYID,
+                                label: `${emp.EMPLOYID} - ${emp.EMPNAME}`,
+                            }))}
+                        />
+                    </div>
+                )}
+                {readEmployeeAssignment && ticket.assigned_to && (
+                    <div className="mt-4">
+                        <h3 className="font-semibold text-base-700 mb-3 flex items-center gap-2">
+                            <UserAddOutlined />
+                            Assigned To
+                        </h3>
+                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <div className="font-semibold text-base-800">
+                                {ticket.assigned_to} -{" "}
+                                {ticket.assigned_to_name || "N/A"}
+                            </div>
+                        </div>
+                    </div>
+                )}
+                {/* Remarks */}
                 {!isViewAction && (
                     <div>
                         <h3 className="font-semibold text-base-700 mt-2">
@@ -373,42 +377,40 @@ const TicketDetailsDrawer = ({
                         <textarea
                             className="textarea textarea-bordered w-full rounded-lg text-sm resize-y mt-2"
                             rows={4}
-                            placeholder="Enter remarks here..."
+                            placeholder="Enter remarks..."
                             value={remarks}
                             onChange={(e) => setRemarks(e.target.value)}
                         ></textarea>
 
-                        {/* Rating only for CLOSE action without existing rating */}
-                        {currentAction.toLowerCase() === "close" &&
-                            !hasExistingRating && (
-                                <div className="mt-4">
-                                    <label className="block">
-                                        <span className="font-semibold text-base-700 flex items-center gap-2">
-                                            <StarOutlined /> Rate your
-                                            experience (Required)
-                                        </span>
-                                    </label>
-                                    <div className="rating rating-lg mt-2">
-                                        {[1, 2, 3, 4, 5].map((star) => (
-                                            <input
-                                                key={star}
-                                                type="radio"
-                                                name="rating"
-                                                className="mask mask-star-2 bg-orange-400"
-                                                checked={rating === star}
-                                                onChange={() => setRating(star)}
-                                            />
-                                        ))}
-                                    </div>
+                        {/* Rating only on close */}
+                        {currentAction === "close" && !hasExistingRating && (
+                            <div className="mt-4">
+                                <label className="block font-semibold text-base-700 flex items-center gap-2">
+                                    <StarOutlined /> Rate your experience
+                                    (Required)
+                                </label>
+                                <div className="rating rating-lg mt-2">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                        <input
+                                            key={star}
+                                            type="radio"
+                                            name="rating"
+                                            className="mask mask-star-2 bg-orange-400"
+                                            checked={rating === star}
+                                            onChange={() => setRating(star)}
+                                        />
+                                    ))}
                                 </div>
-                            )}
+                            </div>
+                        )}
                     </div>
                 )}
 
+                {/* Logs Modal */}
                 <TicketLogsModal
                     visible={logsModalOpen}
                     onClose={() => setLogsModalOpen(false)}
-                    history={combinedHistory}
+                    history={ticketLogs}
                     loading={loadingHistory}
                 />
             </div>

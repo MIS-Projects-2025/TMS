@@ -40,11 +40,16 @@ export default function useTicketingTable(initialProps) {
     const isTicketCritical = (ticket) => {
         if (ticket.STATUS !== 1) return false;
 
-        const createdAt = new Date(ticket.CREATED_AT);
+        const createdAt = new Date(ticket.created_at);
         const now = new Date();
         const minutesOpen = (now - createdAt) / (1000 * 60);
 
         return minutesOpen > 30;
+    };
+    const encodeParams = (params) => {
+        return {
+            f: btoa(JSON.stringify(params)), // single encoded payload
+        };
     };
 
     // Handle status filter change
@@ -67,7 +72,7 @@ export default function useTicketingTable(initialProps) {
 
         console.log("📤 Sending params:", params);
 
-        router.get(route("tickets.datatable"), params, {
+        router.get(route("tickets.datatable"), encodeParams(params), {
             preserveState: true,
             preserveScroll: true,
             onFinish: () => {
@@ -90,7 +95,7 @@ export default function useTicketingTable(initialProps) {
             sortOrder: sorter?.order === "ascend" ? "asc" : "desc",
         };
 
-        router.get(route("tickets.datatable"), params, {
+        router.get(route("tickets.datatable"), encodeParams(params), {
             preserveState: true,
             preserveScroll: true,
             onFinish: () => setLoading(false),
@@ -119,7 +124,7 @@ export default function useTicketingTable(initialProps) {
                 sortOrder: filters?.sortOrder || "desc",
             };
 
-            router.get(route("tickets.datatable"), params, {
+            router.get(route("tickets.datatable"), encodeParams(params), {
                 preserveState: true,
                 preserveScroll: true,
                 onFinish: () => setLoading(false),
@@ -127,14 +132,15 @@ export default function useTicketingTable(initialProps) {
         }, 500);
     };
 
-    // Sync with URL filters
     useEffect(() => {
         setSearchValue(filters?.search || "");
+
         if (filters?.status) {
-            if (filters.status === "critical") {
+            // Directly set the status if it exists in statusMap
+            if (statusMap[filters.status]) {
+                setActiveFilter(filters.status);
+            } else if (filters.status === "critical") {
                 setActiveFilter("critical");
-            } else if (filters.status !== "all") {
-                setActiveFilter(reverseStatusMap[filters.status] || "all");
             } else {
                 setActiveFilter("all");
             }

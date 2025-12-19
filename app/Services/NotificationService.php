@@ -24,12 +24,12 @@ class NotificationService
      */
     public function notifyTicketAction($ticket, string $action, array $actor)
     {
-        Log::info("=== NOTIFYING TICKET ACTION: {$ticket->TICKET_ID}, ACTION: {$action} ===");
+        Log::info("=== NOTIFYING TICKET ACTION: {$ticket->ticket_id}, ACTION: {$action} ===");
 
         try {
             // Check if this is a Support Service type request with status 1-3
             if ($this->shouldSkipNotification($ticket, $action)) {
-                Log::info("Skipping notification for Support Service ticket {$ticket->TICKET_ID}, status: {$ticket->status}");
+                Log::info("Skipping notification for Support Service ticket {$ticket->ticket_id}, status: {$ticket->status}");
                 return ['success' => 0, 'failed' => 0, 'total' => 0, 'skipped' => true];
             }
 
@@ -37,7 +37,7 @@ class NotificationService
             $recipients = $this->getRecipients($ticket, $actor, $action);
 
             if (empty($recipients)) {
-                Log::info("No recipients for ticket {$ticket->TICKET_ID}, action {$action}");
+                Log::info("No recipients for ticket {$ticket->ticket_id}, action {$action}");
                 return ['success' => 0, 'failed' => 0, 'total' => 0];
             }
 
@@ -46,7 +46,7 @@ class NotificationService
 
             // Create the notification prototype
             $notificationPrototype = new TicketNotification(
-                $ticket->TICKET_ID,
+                $ticket->ticket_id,
                 $ticket->request_type ?? '',
                 $actor['name'] ?? '',
                 $ticket->details ?? '',
@@ -61,7 +61,7 @@ class NotificationService
                 strtoupper($action)
             );
         } catch (\Exception $e) {
-            Log::error("Failed to notify ticket action {$ticket->TICKET_ID}: " . $e->getMessage(), [
+            Log::error("Failed to notify ticket action {$ticket->ticket_id}: " . $e->getMessage(), [
                 'exception' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
@@ -201,7 +201,7 @@ class NotificationService
                         }
                     }
                     Log::info("Support Service RESOLVE - Notifying senior approvers", [
-                        'ticket_id' => $ticket->TICKET_ID,
+                        'ticket_id' => $ticket->ticket_id,
                         'senior_approver_count' => count($seniorApprovers)
                     ]);
                     return $seniorApprovers;
@@ -211,7 +211,7 @@ class NotificationService
                     // Notify requestor only
                     $requestor = $this->userRepo->findUserById($ticket->employid);
                     Log::info("Support Service {$action} - Notifying requestor", [
-                        'ticket_id' => $ticket->TICKET_ID,
+                        'ticket_id' => $ticket->ticket_id,
                         'requestor_id' => $ticket->employid
                     ]);
                     return $requestor ? [$requestor] : [];
@@ -219,7 +219,7 @@ class NotificationService
                 default:
                     // For other actions in Support Service, no notifications
                     Log::info("Support Service {$action} - No notifications", [
-                        'ticket_id' => $ticket->TICKET_ID
+                        'ticket_id' => $ticket->ticket_id
                     ]);
                     return [];
             }

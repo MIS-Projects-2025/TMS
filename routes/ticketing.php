@@ -22,4 +22,6 @@ Route::prefix($app_name)
 
         Route::get('/tickets/{ticketId}/details', [TicketingController::class, 'getTicketDetails'])
             ->name('tickets.details');
+        Route::get('/tickets/{ticketId}/logs', [TicketingController::class, 'logs'])
+            ->name('tickets.logs');
     });
