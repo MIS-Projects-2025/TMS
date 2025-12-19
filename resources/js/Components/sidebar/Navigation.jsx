@@ -1,6 +1,6 @@
 import { usePage } from "@inertiajs/react";
 import { LayoutDashboard, Tickets, TicketPlus, Settings } from "lucide-react"; // added Settings icon
-import { FileTextOutlined } from "@ant-design/icons"; // optional AntD icon
+import { FileTextOutlined, UserAddOutlined } from "@ant-design/icons"; // optional AntD icon
 import SidebarLink from "@/Components/sidebar/SidebarLink";
 import Dropdown from "@/Components/sidebar/Dropdown";
 
@@ -9,7 +9,7 @@ export default function NavLinks({ isSidebarOpen }) {
     const roles = emp_data.emp_system_roles || [];
 
     // Check if user has dashboard access
-    const canAccessDashboard = roles.some(role =>
+    const canAccessDashboard = roles.some((role) =>
         ["support", "supervisor", "Senior Approver"].includes(role)
     );
 
@@ -17,8 +17,12 @@ export default function NavLinks({ isSidebarOpen }) {
         {
             href: route("request.type"),
             label: "Request Types",
-            icon: <FileTextOutlined className="text-base" />, 
-           
+            icon: <FileTextOutlined className="text-base" />,
+        },
+        {
+            href: route("approvers"),
+            label: "Approvers",
+            icon: <UserAddOutlined className="text-base" />,
         },
         // other admin links here
     ];
@@ -49,11 +53,11 @@ export default function NavLinks({ isSidebarOpen }) {
                 icon={<Tickets className="w-5 h-5" />}
                 isSidebarOpen={isSidebarOpen}
             />
-            
+
             {canAccessDashboard && (
                 <Dropdown
                     label="Admin"
-                    icon={<Settings className="w-5 h-5" />} 
+                    icon={<Settings className="w-5 h-5" />}
                     links={adminLinks}
                     isSidebarOpen={isSidebarOpen}
                 />

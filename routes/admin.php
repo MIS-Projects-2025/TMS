@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ApproverController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\TicketRequestTypeController;
 use App\Http\Middleware\SupportMiddleware;
@@ -15,4 +16,9 @@ Route::prefix($app_name)
         Route::post('/requestTypes', [TicketRequestTypeController::class, 'store'])->name('request-types.store');
         Route::put('/requestTypes/{id}', [TicketRequestTypeController::class, 'update'])->name('request-types.update');
         Route::delete('/requestTypes/{id}', [TicketRequestTypeController::class, 'destroy'])->name('request-types.destroy');
+
+
+        Route::get('/approvers', [ApproverController::class, 'index'])->name('approvers');
+        Route::post('/approvers', [ApproverController::class, 'store'])->name('approvers.store');
+        Route::delete('/approvers/{id}', [ApproverController::class, 'destroy'])->name('approvers.destroy');
     });

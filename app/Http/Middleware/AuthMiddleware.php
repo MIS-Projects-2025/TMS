@@ -67,7 +67,13 @@ class AuthMiddleware
         ) {
             $systemRoles[] = 'support';
         }
-
+        $seniorApproverIds = DB::connection('mysql')
+            ->table('senior_support_approver')
+            ->pluck('EMPLOYID')
+            ->toArray();
+        if (in_array($currentUser->emp_id, $seniorApproverIds)) {
+            $systemRoles[] = 'senior approver';
+        }
         // 6️⃣ Determine user roles (metadata) using UserRoleService
         $userRoles = $this->userRoleService->getUserAccountTypes((array)$currentUser);
 
