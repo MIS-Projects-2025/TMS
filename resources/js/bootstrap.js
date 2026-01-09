@@ -14,14 +14,14 @@ Pusher.logToConsole = true;
 // Echo configuration for SSL
 window.echo = new Echo({
     broadcaster: "pusher",
-    key: import.meta.env.VITE_PUSHER_APP_KEY,
+ key: "f4a7c2d9e8b1a3c6d5e7f0a9b2c4d6e1",
     cluster: import.meta.env.VITE_PUSHER_APP_CLUSTER || "mt1",
     wsHost: "192.168.2.221",
-    wsPort: 91, // Apache SSL port
-    wssPort: 91, // Same as above
+    wsPort: 86, // Apache SSL port
+    wssPort: 86, // Same as above
     forceTLS: true,
     enabledTransports: ["ws", "wss"],
-    authEndpoint: "https://192.168.2.221:91/MTS/broadcasting/auth",
+    authEndpoint: "https://192.168.2.221:86/MTS/broadcasting/auth",
     auth: {
         headers: {
             "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]')

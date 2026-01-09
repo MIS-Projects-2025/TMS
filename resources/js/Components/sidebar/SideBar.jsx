@@ -31,7 +31,7 @@ export default function Sidebar() {
     const timestamp = Date.now();
     const currentUrl = encodeURIComponent(window.location.href);
     
-    window.location.href = `http://192.168.2.221/authify/public/logout?token=${encodeURIComponent(
+    window.location.href = `http://192.168.1.27:8080/authify/public/logout?token=${encodeURIComponent(
         token
     )}&redirect=${currentUrl}&t=${timestamp}`;
 };
