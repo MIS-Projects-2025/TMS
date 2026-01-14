@@ -326,6 +326,8 @@ const TicketingTable = () => {
                                         showSizeChanger: true,
                                         showQuickJumper: true,
                                         pageSizeOptions: ["10", "20", "50"],
+                                        showTotal: (total, range) =>
+                                             `Showing ${range[0]}-${range[1]} of ${total} entries`,
                                     }}
                                     onChange={handleTableChange}
                                     bordered
