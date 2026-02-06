@@ -2,7 +2,7 @@ import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import React, { useMemo } from "react";
 import { usePage, Head } from "@inertiajs/react";
 import { Table, Spin, Empty, Tag, Tooltip } from "antd";
-import { SearchOutlined } from "@ant-design/icons";
+import { SearchOutlined, ToolOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import TicketFormSkeleton from "@/Components/ticketing/TableSkeleton";
 import StatCard from "@/Components/ticketing/StatCard";
@@ -74,6 +74,13 @@ const TicketingTable = () => {
 
     // Use real-time updates hook
     useRealtimeTicketUpdates({ ticketUpdates, clearTicketUpdates });
+    // Get all unique request types from tickets
+    const requestTypeFilters = [
+        ...new Set(tickets?.map((t) => t.type_of_request).filter(Boolean)),
+    ].map((type) => ({
+        text: type,
+        value: type,
+    }));
 
     // Table columns definition (kept in component due to JSX)
     const columns = useMemo(() => {
@@ -98,6 +105,16 @@ const TicketingTable = () => {
                 key: "type_of_request",
                 width: 150,
                 sorter: true,
+                filters: requestTypeFilters,
+                onFilter: (value, record) => record.type_of_request === value,
+                render: (type) => (
+                    <div className="flex items-center gap-2">
+                        {type === "Support Services" && (
+                            <ToolOutlined style={{ color: "#fa8c16" }} />
+                        )}
+                        <span>{type}</span>
+                    </div>
+                ),
             },
             {
                 title: "Request Option",
@@ -327,7 +344,7 @@ const TicketingTable = () => {
                                         showQuickJumper: true,
                                         pageSizeOptions: ["10", "20", "50"],
                                         showTotal: (total, range) =>
-                                             `Showing ${range[0]}-${range[1]} of ${total} entries`,
+                                            `Showing ${range[0]}-${range[1]} of ${total} entries`,
                                     }}
                                     onChange={handleTableChange}
                                     bordered

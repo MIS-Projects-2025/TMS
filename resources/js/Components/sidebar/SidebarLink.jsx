@@ -1,5 +1,6 @@
 import React from "react";
 import { Link, usePage } from "@inertiajs/react";
+import { Badge } from "antd";
 
 const SidebarLink = ({
     href,
@@ -7,41 +8,42 @@ const SidebarLink = ({
     icon,
     notifications = 0,
     isSidebarOpen,
+    activeColor = "#1890ff", // Ant Design primary color by default
 }) => {
     const { url } = usePage();
     const isActive = url === new URL(href, window.location.origin).pathname;
 
-    // Determine theme
-    const theme = localStorage.getItem("theme") === "dark" ? "dark" : "light";
-
-    // Force dark mode classes
-    const baseText = "text-white"; // always readable
-    const hoverBg = "hover:bg-gray-700";
-    const activeBg = "bg-gray-700";
-    const activeText = "text-white"; // for active link
-
     return (
         <Link
             href={href}
-            className={`relative flex items-center px-4 py-2 transition-colors duration-150 rounded-md
-    ${isActive ? `${activeBg} ${activeText}` : `${hoverBg} ${baseText}`}`}
-            title={!isSidebarOpen ? label : ""} // tooltip on hover if collapsed
+            className={`relative flex items-center px-4 py-2 rounded-md transition-all duration-150
+                ${isActive ? "bg-gray-100 dark:bg-gray-800 font-semibold" : "hover:bg-gray-200 dark:hover:bg-gray-700"}
+            `}
+            title={!isSidebarOpen ? label : ""}
+            style={{
+                borderLeft: isActive
+                    ? `4px solid ${activeColor}`
+                    : "4px solid transparent",
+            }}
         >
-            {/* Icon always visible */}
-            <span className="w-6 h-6">{icon}</span>
+            {/* Icon */}
+            <span className="w-6 h-6 text-gray-700 dark:text-gray-200">
+                {icon}
+            </span>
 
-            {/* Label (only if sidebar is expanded) */}
-            {isSidebarOpen && <p className="ml-2">{label}</p>}
+            {/* Label */}
+            {isSidebarOpen && (
+                <p className="ml-3 text-gray-700 dark:text-gray-200">{label}</p>
+            )}
 
-            {/* Notifications */}
+            {/* Notifications using Ant Design Badge */}
             {notifications > 0 && (
-                <span
-                    className={`ml-auto text-xs px-2 py-1 rounded-md text-white bg-red-600 ${
-                        !isSidebarOpen ? "absolute right-2" : ""
-                    }`}
-                >
-                    {notifications > 99 ? "99+" : notifications}
-                </span>
+                <Badge
+                    count={notifications > 99 ? "99+" : notifications}
+                    className={`ml-auto ${!isSidebarOpen ? "absolute right-2 top-1/2 -translate-y-1/2" : ""}`}
+                    size="small"
+                    style={{ backgroundColor: "#ff4d4f" }} // red color
+                />
             )}
         </Link>
     );

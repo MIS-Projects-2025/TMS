@@ -24,15 +24,15 @@ const Create = () => {
 
     const onFinish = async (values) => {
         console.log("Form values:", values);
-  if (submitting) return;
+        if (submitting) return;
 
-    setSubmitting(true);
+        setSubmitting(true);
         try {
             const response = await axios.post(route("tickets.store"), values);
 
             if (response.data.success) {
                 message.success(
-                    `Ticket created successfully! Ticket ID: ${response.data.ticket_id}`
+                    `Ticket created successfully! Ticket ID: ${response.data.ticket_id}`,
                 );
 
                 form.resetFields();

@@ -15,10 +15,26 @@ class DashboardService
 
     public function getDashboardData($user): array
     {
-        // Determine if user is support or supervisor+
-        $isSupervisorOrAbove = in_array($user['emp_system_role'] ?? 'support', ['supervisor', 'manager', 'admin']);
+        // Get roles - handle both array and string cases
+        $roles = $user['emp_user_roles'] ?? $user['emp_system_role'] ?? ['SUPPORT_TECHNICIAN'];
+        
+        // Ensure it's an array
+        if (!is_array($roles)) {
+            $roles = [$roles];
+        }
+        
+        // Define manager-level roles
+        $managerRoles = ['MIS_SUPERVISOR', 'supervisor', 'manager', 'admin'];
+        
+        // Check if user has any manager-level role
+        $isSupervisorOrAbove = !empty(array_intersect($roles, $managerRoles));
+        
+        // If supervisor or above, show all data (userId = null)
+        // Otherwise, filter by their specific emp_id
         $userId = $isSupervisorOrAbove ? null : ($user['emp_id'] ?? null);
-        // dd($user['emp_system_role']);
+        
+      
+        
         return [
             'responseTime' => $this->tickets->getResponseTime($userId),
             'ticketsPerDay' => $this->tickets->getTicketsPerDay($userId),
