@@ -2,9 +2,9 @@
 
 namespace App\Traits;
 
-use App\Models\ActivityLog;
+
 use App\Models\TicketLogs;
-use Illuminate\Support\Facades\Auth;
+
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 trait Loggable

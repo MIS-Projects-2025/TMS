@@ -4,11 +4,11 @@ import NotificationBell from "./NotificationBell";
 
 export default function NavBar() {
     const { emp_data } = usePage().props;
-   const logout = () => {
+    const logout = () => {
         localStorage.clear();
         sessionStorage.clear();
 
-        window.location.href = route("logout"); // Laravel handles SSO redirect
+        window.location.href = route("logout");
     };
 
     return (

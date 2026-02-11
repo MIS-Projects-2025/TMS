@@ -217,7 +217,7 @@ class TicketRepository
     /**
      * Apply user and role-based filters
      */
-    private function applyUserFilters($query, array $filters)
+    private function    applyUserFilters($query, array $filters)
     {
         $userId = $filters['userId'] ?? null;
         $userRoles = $filters['userRoles'] ?? [];

@@ -80,7 +80,7 @@ const RequestTypeDrawer = ({
             }
             open={visible}
             onClose={handleClose}
-            width={520}
+            size={520}
             footer={
                 <div style={{ textAlign: "right" }}>
                     <Space>
