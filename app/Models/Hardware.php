@@ -8,7 +8,7 @@ class Hardware extends Model
 {
 
     protected $connection = 'inventory';
-    protected $table = 'hardware_table';
+    protected $table = 'hardware';
 
     protected $fillable = [
         'hostname',

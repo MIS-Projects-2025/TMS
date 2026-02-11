@@ -10,6 +10,7 @@ use App\Services\UserRoleService;
 use App\Services\NotificationService;
 use Illuminate\Support\Facades\DB;
 use App\Repositories\UserRepository;
+use Illuminate\Support\Facades\Log;
 
 class TicketService
 {
@@ -136,83 +137,77 @@ class TicketService
             'filters' => $filters,
         ];
     }
+public function ticketAction(
+    string $ticketId,
+    string $userId,
+    string $actionType = 'RESOLVE',
+    string $remarks = '',
+    ?int $rating = null,
+    ?string $assignedTo = null
+): bool {
+    $actionType = strtoupper($actionType);
+    if (!in_array($actionType, ['RESOLVE', 'CLOSE', 'RETURN', 'ONGOING', 'CANCEL', 'ONPROCESS', 'ASSIGN'])) {
+        throw new \InvalidArgumentException('Invalid action type');
+    }
 
+    return DB::transaction(function () use ($ticketId, $userId, $actionType, $remarks, $rating, $assignedTo) {
 
-    public function ticketAction(
-        string $ticketId,
-        string $userId,
-        string $actionType = 'RESOLVE',
-        string $remarks = '',
-        ?int $rating = null,
-        ?string $assignedTo = null
-    ): bool {
-        $actionType = strtoupper($actionType);
-        if (!in_array($actionType, ['RESOLVE', 'CLOSE', 'RETURN', 'ONGOING', 'CANCEL', 'ONPROCESS', 'ASSIGN'])) {
-            throw new \InvalidArgumentException('Invalid action type');
+        $ticket = $this->ticketRepository->findTicketById($ticketId);
+        if (!$ticket) return false;
+
+        $oldStatus = $ticket->status;
+
+        $statusMap = [
+            'ONPROCESS' => 2,
+            'ONGOING' => 3,
+            'RESOLVE' => 4,
+            'ASSIGN' => 4,
+            'CLOSE' => 5,
+            'RETURN' => 6,
+            'CANCEL' => 7
+        ];
+        $newStatus = $statusMap[$actionType];
+
+        $updateData = ['status' => $newStatus];
+
+        if ($actionType === 'ASSIGN' || $actionType === 'RESOLVE') {
+            if ($assignedTo) {
+                $updateData['assigned_to'] = $assignedTo;
+                $updateData['assigned_at'] = now();
+                $updateData['assigned_by'] = $userId;
+            }
         }
 
-        return DB::transaction(function () use ($ticketId, $userId, $actionType, $remarks, $rating, $assignedTo) {
+        if ($actionType === 'RESOLVE') {
+            $updateData['handled_by'] = $userId;
+            $updateData['handled_at'] = now();
+        }
 
-            $ticket = $this->ticketRepository->findTicketById($ticketId);
-            if (!$ticket) return false;
+        if ($actionType === 'CLOSE') {
+            $updateData['closed_by'] = $userId;
+            $updateData['closed_at'] = now();
+            if (!is_null($rating)) $updateData['rating'] = $rating;
+        }
 
-            $oldStatus = $ticket->status;
+        // Set the action type and remarks on the model
+        $ticket->currentAction = $actionType;
+        $ticket->currentRemarks = $remarks; // Add this property
 
-            $statusMap = [
-                'ONPROCESS' => 2,
-                'ONGOING' => 3,
-                'RESOLVE' => 4,
-                'ASSIGN' => 4,
-                'CLOSE' => 5,
-                'RETURN' => 6,
-                'CANCEL' => 7
-            ];
-            $newStatus = $statusMap[$actionType];
-            // dd($actionType);
-            $updateData = ['status' => $newStatus];
+        $this->ticketRepository->updateTicket($ticket, $updateData);
 
-            if ($actionType === 'ASSIGN' || $actionType === 'RESOLVE') {
-                if ($assignedTo) {
-                    $updateData['assigned_to'] = $assignedTo;
-                    $updateData['assigned_at'] = now();
-                    $updateData['assigned_by'] = $userId;
-                }
-            }
+        // Get the actual actor's name
+        $actorUser = $this->userRepo->findUserById($userId);
+        $actorData = [
+            'emp_id' => $userId,
+            'name' => $actorUser->empname ?? 'Unknown'
+        ];
 
-            if ($actionType === 'RESOLVE') {
-                $updateData['handled_by'] = $userId;
-                $updateData['handled_at'] = now();
-            }
+        // Send notification
+        $this->notificationService->notifyTicketAction($ticket, $actionType, $actorData);
 
-            if ($actionType === 'CLOSE') {
-                $updateData['closed_by'] = $userId;
-                $updateData['closed_at'] = now();
-                if (!is_null($rating)) $updateData['rating'] = $rating;
-            }
-
-
-            // dd($updateData);
-            $ticket->currentAction = $actionType;
-
-            $this->ticketRepository->updateTicket($ticket, $updateData);
-
-            // Log action
-            $logRemarks = $remarks ?: ucfirst(strtolower($actionType)) . ' by user';
-
-
-            // Get the actual actor's name
-            $actorUser = $this->userRepo->findUserById($userId);
-            $actorData = [
-                'emp_id' => $userId,
-                'name' => $actorUser->empname ?? 'Unknown'
-            ];
-
-            // Send notification — recipients determined inside NotificationService
-            $this->notificationService->notifyTicketAction($ticket, $actionType, $actorData);
-
-            return true;
-        });
-    }
+        return true;
+    });
+}
 
 
     /**
@@ -269,7 +264,7 @@ class TicketService
         // RESOLVED (4)
         if ($status == 4) {
             // Support staff can always view and manage assignments (even if already assigned)
-            if ($isSupport && !$isAssignedEmployee) {
+            if ($isSupport && !$isAssignedEmployee&&!$isSupportService) {
                 $actions = ['Assign']; // Support can view and reassign via drawer UI
                 $actionLabel = 'Assignment'; // Special label to show assignment is available
             }
@@ -318,32 +313,33 @@ class TicketService
     }
 
 
-    /**
-     * Business logic: Build role-based access conditions
-     */
-    private function buildRoleBasedConditions(array $employeeData): array
-    {
-        $userId = $employeeData['emp_id'];
-        $userRoles = $employeeData['emp_user_roles'] ?? [];
+/**
+ * Business logic: Build role-based access conditions
+ */
+private function buildRoleBasedConditions(array $employeeData): array
+{
+    $userId = $employeeData['emp_id'];
+    $userRoles = $employeeData['emp_user_roles'] ?? [];
 
-        $conditions = [];
+    $conditions = [];
 
-        if (in_array('MIS_SUPERVISOR', $userRoles) || in_array('SUPPORT_TECHNICIAN', $userRoles) || in_array('OD', $userRoles)) {
-            // Full access - no conditions needed
-        } elseif (in_array('DEPARTMENT_HEAD', $userRoles)) {
-            $approverEmployeeIds = $this->ticketRepository->getApproverIds($userId);
-            if (!empty($approverEmployeeIds)) {
-                $conditions[] = ['employid', 'IN', $approverEmployeeIds];
-            } else {
-                $conditions[] = ['employid', '=', $userId];
-            }
-        } else {
-            // Regular user - only their own tickets
-            $conditions[] = ['employid', '=', $userId];
+    if (in_array('MIS_SUPERVISOR', $userRoles) || in_array('SUPPORT_TECHNICIAN', $userRoles) || in_array('OD', $userRoles)) {
+        // Full access - no conditions needed
+    } elseif (in_array('DEPARTMENT_HEAD', $userRoles)) {
+        $approverEmployeeIds = $this->ticketRepository->getApproverIds($userId);
+        if (!empty($approverEmployeeIds)) {
+            // For dept heads with team: show team tickets OR tickets assigned to them
+            $conditions['dept_head_access'] = [
+                'user_id' => $userId,
+                'approver_ids' => $approverEmployeeIds
+            ];
         }
-
-        return $conditions;
+        // If no approver IDs, let applyUserFilters handle it (own tickets + assigned)
     }
+    // Regular users: no conditions - applyUserFilters handles (own tickets + assigned)
+
+    return $conditions;
+}
 
     /**
      * Business validation for ticket data
@@ -420,5 +416,36 @@ class TicketService
     public function getAssignedApprovers(string $ticketId)
     {
         return $this->ticketRepository->getAssignedApprovers($ticketId);
+    }
+
+        /**
+     * Process all tickets that need auto-closing
+     * Returns array with summary of processed tickets
+     */
+    public function processAutoCloseTickets(): array
+    {
+        $tickets = $this->ticketRepository->findResolvedTicketsForAutoClose();
+        $processed = 0;
+        $failed = 0;
+        $failedTickets = [];
+
+        foreach ($tickets as $ticket) {
+            try {
+                $this->ticketRepository->updateTicketToAutoClosed($ticket);
+                $processed++;
+                Log::info("Auto-closed ticket: {$ticket->ticket_id}");
+            } catch (\Exception $e) {
+                $failed++;
+                $failedTickets[] = $ticket->ticket_id;
+                Log::error("Failed to auto-close ticket {$ticket->ticket_id}: " . $e->getMessage());
+            }
+        }
+
+        return [
+            'total_found' => $tickets->count(),
+            'processed' => $processed,
+            'failed' => $failed,
+            'failed_tickets' => $failedTickets,
+        ];
     }
 }

@@ -2,23 +2,29 @@
 
 namespace App\Services;
 
-use App\Repositories\TicketRepository;
+use App\Repositories\TicketDashboardRepository; 
 
 class DashboardService
 {
     protected $tickets;
 
-    public function __construct(TicketRepository $tickets)
+    public function __construct(TicketDashboardRepository $tickets) 
     {
         $this->tickets = $tickets;
     }
 
     public function getDashboardData($user): array
     {
-        // Determine if user is support or supervisor+
-        $isSupervisorOrAbove = in_array($user['emp_system_role'] ?? 'support', ['supervisor', 'manager', 'admin']);
+        $roles = $user['emp_user_roles'] ?? $user['emp_system_role'] ?? ['SUPPORT_TECHNICIAN'];
+
+        if (!is_array($roles)) {
+            $roles = [$roles];
+        }
+
+        $managerRoles = ['MIS_SUPERVISOR', 'supervisor', 'manager', 'admin'];
+        $isSupervisorOrAbove = !empty(array_intersect($roles, $managerRoles));
         $userId = $isSupervisorOrAbove ? null : ($user['emp_id'] ?? null);
-        // dd($user['emp_system_role']);
+
         return [
             'responseTime' => $this->tickets->getResponseTime($userId),
             'ticketsPerDay' => $this->tickets->getTicketsPerDay($userId),
@@ -29,6 +35,8 @@ class DashboardService
             'avgResponseTimePerIssue' => $this->tickets->getAvgResponseTimePerIssue($userId),
             'paretoByType' => $this->tickets->getParetoByRequestType($userId),
             'avgRatingPerEmployee' => $this->tickets->getAvgRatingPerEmployee($userId),
+            'autoClosedTicketsChart' => $this->tickets->getAutoClosedTickets($userId),
+            'autoClosedTicketsCount' => $this->tickets->getAutoClosedTicketsCount($userId),
         ];
     }
 }

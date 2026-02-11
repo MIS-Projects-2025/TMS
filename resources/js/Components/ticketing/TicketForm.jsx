@@ -17,6 +17,7 @@ const TicketForm = ({
     handleChange,
     getItemLabel,
     onFinish,
+    submitting,
 }) => {
     return (
         <Form
@@ -176,14 +177,25 @@ const TicketForm = ({
             )}
 
             {/* Submit Button */}
-            {selectedOption && (
-                <Form.Item>
-                    <button type="submit" className="btn btn-success w-full">
-                        <TicketIcon className="inline mr-2" />
-                        Generate Ticket
-                    </button>
-                </Form.Item>
+       {selectedOption && (
+    <Form.Item>
+        <button
+            type="submit"
+            className="btn btn-success w-full"
+            disabled={submitting}
+        >
+            {submitting ? (
+                "Generating..."
+            ) : (
+                <>
+                    <TicketIcon className="inline mr-2" />
+                    Generate Ticket
+                </>
             )}
+        </button>
+    </Form.Item>
+)}
+
         </Form>
     );
 };

@@ -9,6 +9,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 trait Loggable
 {
+    public string|null $currentAction = null;
+    public string|null $currentRemarks = null; // Add this property
+
     public static function bootLoggable()
     {
         static::created(function ($model) {
@@ -63,7 +66,11 @@ trait Loggable
             'action_at'     => now()->format('Y-m-d H:i:s'),
             'old_values'    => $action === 'updated' ? $formatDateFields(array_intersect_key($this->getOriginal(), $dirty)) : null,
             'new_values'    => $action === 'updated' ? $formatDateFields($dirty) : $formatDateFields($this->getAttributes()),
+            'remarks'       => $this->currentRemarks ?? null, // Add remarks here
         ]);
+
+        // Clear the remarks after logging
+        $this->currentRemarks = null;
     }
 
     public function activityLogs()

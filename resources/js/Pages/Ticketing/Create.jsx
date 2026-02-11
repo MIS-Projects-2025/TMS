@@ -8,6 +8,7 @@ import EmployeeInfo from "@/Components/ticketing/EmployeeInfo";
 
 const Create = () => {
     const [form] = Form.useForm();
+    const [submitting, setSubmitting] = useState(false);
     const {
         emp_data,
         request_types,
@@ -23,13 +24,15 @@ const Create = () => {
 
     const onFinish = async (values) => {
         console.log("Form values:", values);
+        if (submitting) return;
 
+        setSubmitting(true);
         try {
             const response = await axios.post(route("tickets.store"), values);
 
             if (response.data.success) {
                 message.success(
-                    `Ticket created successfully! Ticket ID: ${response.data.ticket_id}`
+                    `Ticket created successfully! Ticket ID: ${response.data.ticket_id}`,
                 );
 
                 form.resetFields();
@@ -39,6 +42,7 @@ const Create = () => {
         } catch (error) {
             message.error("Failed to create ticket. Please try again.");
             console.error("Ticket creation error:", error);
+            setSubmitting(false);
         }
     };
 
@@ -71,6 +75,7 @@ const Create = () => {
                             handleChange={handleChange}
                             getItemLabel={getItemLabel}
                             onFinish={onFinish}
+                            submitting={submitting}
                         />
                     </div>
                 </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Drawer, Tag, Select, message, Tooltip } from "antd";
+import { Drawer, Row, Col, Tag, Select, Tooltip } from "antd";
 import dayjs from "dayjs";
 import {
     UserOutlined,
@@ -14,6 +14,7 @@ import {
     StarOutlined,
     UserAddOutlined,
     InfoCircleOutlined,
+    ProfileOutlined,
 } from "@ant-design/icons";
 import { TicketIcon } from "lucide-react";
 import TicketLogsModal from "./TicketLogsModal";
@@ -50,8 +51,8 @@ const TicketDetailsDrawer = ({
         const endTime = ticket.closed_at
             ? new Date(ticket.closed_at.replace(" ", "T"))
             : ticket.handled_at
-            ? new Date(ticket.handled_at.replace(" ", "T"))
-            : new Date();
+              ? new Date(ticket.handled_at.replace(" ", "T"))
+              : new Date();
 
         const mins = Math.floor((endTime - created) / 60000);
         const hours = Math.floor(mins / 60);
@@ -79,13 +80,11 @@ const TicketDetailsDrawer = ({
                 actionType,
                 remarks,
                 rating,
-                assignedEmployee
+                assignedEmployee,
             );
         } else {
             handleButtonClick(ticketId, actionType, remarks, rating);
         }
-
-        // Reset assignment after action
         setAssignedEmployee(null);
     };
 
@@ -100,6 +99,7 @@ const TicketDetailsDrawer = ({
         ["assign", "resolve"].includes(actionStr) ||
         ["RESOLVED", "ONGOING"].includes(ticket.STATUS);
     const readEmployeeAssignment = !showEmployeeAssignment;
+
     return (
         <Drawer
             title={
@@ -187,17 +187,15 @@ const TicketDetailsDrawer = ({
                                             key={a}
                                             className={`flex items-center gap-1 px-3 py-1 text-white rounded-lg text-sm shadow-sm ${btnColor} transition-colors duration-150`}
                                             onClick={() => {
-                                                if (type === "close") {
+                                                if (type === "close")
                                                     setCurrentAction("close");
-                                                } else if (type === "ongoing") {
+                                                else if (type === "ongoing")
                                                     setCurrentAction(type);
-                                                } else {
-                                                    // Resolve, Return, Cancel work directly
+                                                else
                                                     handleActionClick(
                                                         ticket.ticket_id,
-                                                        a
+                                                        a,
                                                     );
-                                                }
                                             }}
                                         >
                                             {icons[type] || (
@@ -222,7 +220,7 @@ const TicketDetailsDrawer = ({
                                         ticket.ticket_id,
                                         "Close",
                                         remarks,
-                                        rating
+                                        rating,
                                     );
                                     setCurrentAction("");
                                     setRemarks(ticket.remarks || "");
@@ -241,7 +239,7 @@ const TicketDetailsDrawer = ({
                                     handleActionClick(
                                         ticket.ticket_id,
                                         currentAction.charAt(0).toUpperCase() +
-                                            currentAction.slice(1)
+                                            currentAction.slice(1),
                                     );
                                     setCurrentAction("");
                                     setRemarks(ticket.remarks || "");
@@ -281,24 +279,41 @@ const TicketDetailsDrawer = ({
                     <h3 className="font-semibold text-base-700 mb-3">
                         Employee Details
                     </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-2">
-                        <div>
+                    <Row gutter={[16, 16]}>
+                        <Col xs={24} sm={12}>
                             <div className="text-base-500 text-md flex items-center gap-2">
                                 <UserOutlined /> Requestor
                             </div>
                             <div className="font-semibold text-base-800">
                                 {ticket.employid} - {ticket.empname}
                             </div>
-                        </div>
-                        <div>
+                        </Col>
+
+                        <Col xs={24} sm={12}>
                             <div className="text-base-500 text-md flex items-center gap-2">
                                 <ApartmentOutlined /> Department
                             </div>
                             <div className="font-semibold text-base-800">
                                 {ticket.department || "-"}
                             </div>
-                        </div>
-                    </div>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                            <div className="text-base-500 text-md flex items-center gap-2">
+                                <ApartmentOutlined /> Product Line
+                            </div>
+                            <div className="font-semibold text-base-800">
+                                {ticket.prodline || "-"}
+                            </div>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                            <div className="text-base-500 text-md flex items-center gap-2">
+                                <ApartmentOutlined /> Station
+                            </div>
+                            <div className="font-semibold text-base-800">
+                                {ticket.station || "-"}
+                            </div>
+                        </Col>
+                    </Row>
                 </div>
 
                 {/* Ticket Details */}
@@ -306,24 +321,47 @@ const TicketDetailsDrawer = ({
                     <h3 className="font-semibold text-base-700 mb-3">
                         Ticket Details
                     </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-2">
-                        <div>
+                    <Row gutter={[16, 16]}>
+                        <Col xs={24} sm={12}>
                             <div className="text-base-500 text-md flex items-center gap-2">
                                 <TagsOutlined /> Request Type
                             </div>
                             <div className="font-semibold text-base-800">
                                 {ticket.type_of_request}
                             </div>
-                        </div>
-                        <div>
+                        </Col>
+
+                        <Col xs={24} sm={12}>
                             <div className="text-base-500 text-md flex items-center gap-2">
                                 <AppstoreOutlined /> Request Option
                             </div>
                             <div className="font-semibold text-base-800">
                                 {ticket.request_option}
                             </div>
-                        </div>
-                    </div>
+                        </Col>
+
+                        {ticket.item_name && (
+                            <Col xs={24} sm={12}>
+                                <div className="text-base-500 text-md flex items-center gap-2">
+                                    <ProfileOutlined /> Item Name
+                                </div>
+                                <div className="font-semibold text-base-800">
+                                    {ticket.item_name}
+                                </div>
+                            </Col>
+                        )}
+
+                        {ticket.details && (
+                            <Col xs={24}>
+                                <div className="text-base-500 text-md flex items-center gap-2">
+                                    <InfoCircleOutlined /> Details
+                                </div>
+                                <div className="font-semibold text-base-800">
+                                    {ticket.details}
+                                </div>
+                            </Col>
+                        )}
+                    </Row>
                 </div>
 
                 {/* Assign Employee */}
@@ -354,6 +392,7 @@ const TicketDetailsDrawer = ({
                         />
                     </div>
                 )}
+
                 {readEmployeeAssignment && ticket.assigned_to && (
                     <div className="mt-4">
                         <h3 className="font-semibold text-base-700 mb-3 flex items-center gap-2">
@@ -368,6 +407,7 @@ const TicketDetailsDrawer = ({
                         </div>
                     </div>
                 )}
+
                 {/* Remarks */}
                 {!isViewAction && (
                     <div>
@@ -382,7 +422,6 @@ const TicketDetailsDrawer = ({
                             onChange={(e) => setRemarks(e.target.value)}
                         ></textarea>
 
-                        {/* Rating only on close */}
                         {currentAction === "close" && !hasExistingRating && (
                             <div className="mt-4">
                                 <label className="block font-semibold text-base-700 flex items-center gap-2">

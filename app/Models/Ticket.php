@@ -13,6 +13,7 @@ class Ticket extends Model
     protected $table = 'ticketing_support';
     protected $primaryKey = 'id';
     public string|null $currentAction = null;
+    public string|null $currentRemarks = null; // Add this property
 
     protected $fillable = [
         'ticket_id',
@@ -43,13 +44,23 @@ class Ticket extends Model
         'updated_at' => 'datetime',
         'created_at' => 'datetime',
     ];
+
     public function handler()
     {
-        return $this->belongsTo(User::class, 'HANDLER_ID', 'EMPLOYID');
+        return $this->belongsTo(User::class, 'handled_by', 'EMPLOYID');
     }
 
     public function closer()
     {
-        return $this->belongsTo(User::class, 'CLOSER_ID', 'EMPLOYID');
+        return $this->belongsTo(User::class, 'closed_by', 'EMPLOYID');
     }
+
+    public function assignee()
+    {
+        return $this->belongsTo(User::class, 'assigned_to', 'EMPLOYID');
+    }
+    public function logs()
+{
+    return $this->morphMany(TicketLogs::class, 'loggable', 'loggable_type', 'loggable_id', 'ticket_id');
+}
 }

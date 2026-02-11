@@ -63,40 +63,43 @@ class User extends Authenticatable
             ->count();
     }
 
-    public static function getApproversByProdline(string $prodline, string $department): array
-    {
-        // Get all APPROVER1 and APPROVER2 EMPLOYIDs in this PRODLINE + DEPARTMENT
-        $approverIds = self::where('PRODLINE', $prodline)
-            ->where('DEPARTMENT', $department)
-            ->where(function ($q) {
-                $q->whereNotNull('APPROVER1')
-                    ->orWhereNotNull('APPROVER2');
-            })
-            ->get(['APPROVER1', 'APPROVER2']);
+  public static function getApproversByProdline(string $prodline, string $department): array
+{
+    // Get all APPROVER1 and APPROVER2 EMPLOYIDs
+    // from ACTIVE employees in this PRODLINE + DEPARTMENT
+    $approverIds = self::where('PRODLINE', $prodline)
+        ->where('DEPARTMENT', $department)
+        ->where('ACCSTATUS', 1) 
+        ->where(function ($q) {
+            $q->whereNotNull('APPROVER1')
+              ->orWhereNotNull('APPROVER2');
+        })
+        ->get(['APPROVER1', 'APPROVER2']);
 
-        $listIds = [];
-        foreach ($approverIds as $row) {
-            if ($row->APPROVER1) $listIds[] = $row->APPROVER1;
-            if ($row->APPROVER2) $listIds[] = $row->APPROVER2;
-        }
-
-        // Unique EMPLOYIDs
-        $listIds = array_values(array_unique($listIds));
-
-        if (empty($listIds)) {
-            return [];
-        }
-
-        // Get EMPNAME for each EMPLOYID
-        $approvers = self::whereIn('EMPLOYID', $listIds)
-            ->get(['EMPLOYID', 'EMPNAME']);
-
-        // Return as array suitable for select/options
-        return $approvers->map(fn($a) => [
-            'EMPLOYID' => $a->EMPLOYID,
-            'EMPNAME'  => $a->EMPNAME,
-        ])->toArray();
+    $listIds = [];
+    foreach ($approverIds as $row) {
+        if ($row->APPROVER1) $listIds[] = $row->APPROVER1;
+        if ($row->APPROVER2) $listIds[] = $row->APPROVER2;
     }
+
+    // Unique EMPLOYIDs
+    $listIds = array_values(array_unique($listIds));
+
+    if (empty($listIds)) {
+        return [];
+    }
+
+    // Get ACTIVE approvers only
+    $approvers = self::whereIn('EMPLOYID', $listIds)
+        ->where('ACCSTATUS', 1) 
+        ->get(['EMPLOYID', 'EMPNAME']);
+
+    return $approvers->map(fn ($a) => [
+        'EMPLOYID' => $a->EMPLOYID,
+        'EMPNAME'  => $a->EMPNAME,
+    ])->toArray();
+}
+
     public static function getMISApprovers(): Collection
     {
         return collect(
