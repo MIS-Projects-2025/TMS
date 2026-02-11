@@ -59,4 +59,8 @@ class Ticket extends Model
     {
         return $this->belongsTo(User::class, 'assigned_to', 'EMPLOYID');
     }
+    public function logs()
+{
+    return $this->morphMany(TicketLogs::class, 'loggable', 'loggable_type', 'loggable_id', 'ticket_id');
+}
 }

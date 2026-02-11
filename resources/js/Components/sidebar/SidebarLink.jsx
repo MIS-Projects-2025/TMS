@@ -17,7 +17,7 @@ const SidebarLink = ({
         <Link
             href={href}
             className={`relative flex items-center px-4 py-2 rounded-md transition-all duration-150
-                ${isActive ? "bg-gray-100 dark:bg-gray-800 font-semibold" : "hover:bg-gray-200 dark:hover:bg-gray-700"}
+                ${isActive ? "bg-gray-800 font-semibold" : "hover:bg-gray-700"}
             `}
             title={!isSidebarOpen ? label : ""}
             style={{
@@ -27,14 +27,10 @@ const SidebarLink = ({
             }}
         >
             {/* Icon */}
-            <span className="w-6 h-6 text-gray-700 dark:text-gray-200">
-                {icon}
-            </span>
+            <span className="w-6 h-6 text-gray-200 ">{icon}</span>
 
             {/* Label */}
-            {isSidebarOpen && (
-                <p className="ml-3 text-gray-700 dark:text-gray-200">{label}</p>
-            )}
+            {isSidebarOpen && <p className="ml-3 text-gray-200 ">{label}</p>}
 
             {/* Notifications using Ant Design Badge */}
             {notifications > 0 && (

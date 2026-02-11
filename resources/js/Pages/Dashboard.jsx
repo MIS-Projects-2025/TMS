@@ -1,5 +1,7 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import { Head, usePage } from "@inertiajs/react";
+import { BarChart3, CheckCircle2, Clock, Bot, TrendingUp } from "lucide-react";
+
 import { useState } from "react";
 import {
     BarChart,
@@ -14,6 +16,8 @@ import {
     Legend,
     ResponsiveContainer,
     Cell,
+    PieChart,
+    Pie,
 } from "recharts";
 
 const COLORS = {
@@ -78,6 +82,8 @@ const truncateText = (text, maxLength = 15) => {
 
 export default function Dashboard() {
     const { dashboard, userRole } = usePage().props;
+    console.log(usePage().props);
+
     const [selectedChart, setSelectedChart] = useState("all");
 
     // Determine if user has manager-level access
@@ -182,7 +188,12 @@ export default function Dashboard() {
                 : "Your Average Rating",
         },
     ];
-
+    if (isManagerView) {
+        chartOptions.push({
+            value: "autoClosedTickets",
+            label: "Auto Closed Tickets by System",
+        });
+    }
     /* ----------------------------- HELPER FUNCTION ----------------------------- */
     const getRoleLabel = () => {
         if (userRole === "admin") return "Admin Overview";
@@ -635,36 +646,197 @@ export default function Dashboard() {
         </ChartCard>
     );
 
-    /* ----------------------------- RENDER SELECTED CHART ----------------------------- */
-    const renderChart = () => {
-        switch (selectedChart) {
-            case "responseTime":
-                return <ResponseTimeChart />;
-            case "dailyTickets":
-                return <DailyTicketsChart />;
-            case "ticketsHandled":
-                return <TicketsHandledChart />;
-            case "issueResponse":
-                return <IssueResponseChart />;
-            case "optionResponse":
-                return <OptionResponseChart />;
-            case "pareto":
-                return <ParetoChart />;
-            case "ratings":
-                return <RatingsChart />;
-            default:
+    const AutoClosedTicketsChart = () => {
+        const chartData = dashboard.autoClosedTicketsChart || {};
+
+        if (!chartData.total_tickets) {
+            return (
+                <ChartCard
+                    title="Auto Closed vs Manual Tickets"
+                    description="Distribution of ticket handling methods"
+                >
+                    <div className="flex items-center justify-center h-[400px] text-base-content/60">
+                        No data available
+                    </div>
+                </ChartCard>
+            );
+        }
+
+        const pieData = [
+            {
+                name: "Auto Closed",
+                value: chartData.auto_closed || 0,
+                color: COLORS.tertiary,
+                percentage: chartData.percentage || 0,
+            },
+            {
+                name: "Manually Handled",
+                value: chartData.manually_handled || 0,
+                color: COLORS.info,
+                percentage: 100 - (chartData.percentage || 0),
+            },
+        ];
+
+        const CustomPieTooltip = ({ active, payload }) => {
+            if (active && payload && payload.length) {
+                const data = payload[0].payload;
                 return (
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                        <ResponseTimeChart />
-                        <DailyTicketsChart />
-                        <TicketsHandledChart />
-                        <IssueResponseChart />
-                        <OptionResponseChart />
-                        <ParetoChart />
-                        <RatingsChart />
+                    <div className="bg-base-100 p-4 border-2 border-base-300 rounded-lg shadow-xl">
+                        <p className="font-bold text-base-content mb-2 text-sm">
+                            {data.name}
+                        </p>
+                        <p
+                            className="text-sm font-medium"
+                            style={{ color: data.color }}
+                        >
+                            Count:{" "}
+                            <span className="font-bold">{data.value}</span>
+                        </p>
+                        <p
+                            className="text-sm font-medium"
+                            style={{ color: data.color }}
+                        >
+                            Percentage:{" "}
+                            <span className="font-bold">
+                                {data.percentage.toFixed(2)}%
+                            </span>
+                        </p>
                     </div>
                 );
-        }
+            }
+            return null;
+        };
+
+        const RADIAN = Math.PI / 180;
+        const renderCustomizedLabel = ({
+            cx,
+            cy,
+            midAngle,
+            innerRadius,
+            outerRadius,
+            percent,
+        }) => {
+            const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+            const x = cx + radius * Math.cos(-midAngle * RADIAN);
+            const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+            return (
+                <text
+                    x={x}
+                    y={y}
+                    fill="white"
+                    textAnchor={x > cx ? "start" : "end"}
+                    dominantBaseline="central"
+                    className="font-bold text-sm"
+                >
+                    {`${(percent * 100).toFixed(1)}%`}
+                </text>
+            );
+        };
+
+        return (
+            <ChartCard
+                title="Auto Closed vs Manual Tickets"
+                description={`Overall ticket distribution - Total: ${chartData.total_tickets} tickets`}
+            >
+                <ResponsiveContainer width="100%" height={400}>
+                    <PieChart>
+                        <Pie
+                            data={pieData}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={renderCustomizedLabel}
+                            outerRadius={120}
+                            fill="#8884d8"
+                            dataKey="value"
+                        >
+                            {pieData.map((entry, index) => (
+                                <Cell
+                                    key={`cell-${index}`}
+                                    fill={entry.color}
+                                />
+                            ))}
+                        </Pie>
+                        <Tooltip content={<CustomPieTooltip />} />
+                        <Legend content={<CustomLegend />} />
+                    </PieChart>
+                </ResponsiveContainer>
+                <div className="mt-6 grid grid-cols-2 gap-4">
+                    <div className="bg-base-200 p-4 rounded-lg border border-base-300">
+                        <div className="text-xs text-base-content/60 mb-1">
+                            Auto Closed
+                        </div>
+                        <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                            {chartData.auto_closed}
+                        </div>
+                        <div className="text-sm text-base-content/70 mt-1">
+                            {chartData.percentage.toFixed(2)}% of total
+                        </div>
+                    </div>
+                    <div className="bg-base-200 p-4 rounded-lg border border-base-300">
+                        <div className="text-xs text-base-content/60 mb-1">
+                            Manually Handled
+                        </div>
+                        <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">
+                            {chartData.manually_handled}
+                        </div>
+                        <div className="text-sm text-base-content/70 mt-1">
+                            {(100 - chartData.percentage).toFixed(2)}% of total
+                        </div>
+                    </div>
+                </div>
+            </ChartCard>
+        );
+    };
+
+    /* ----------------------------- RENDER SELECTED CHART ----------------------------- */
+    const renderChart = () => {
+        // Filter out AutoClosedTickets chart for non-managers
+        const chartsToRender =
+            selectedChart === "all"
+                ? [
+                      <ResponseTimeChart key="responseTime" />,
+                      <DailyTicketsChart key="dailyTickets" />,
+                      <TicketsHandledChart key="ticketsHandled" />,
+                      <IssueResponseChart key="issueResponse" />,
+                      <OptionResponseChart key="optionResponse" />,
+                      <ParetoChart key="pareto" />,
+                      <RatingsChart key="ratings" />,
+                      ...(isManagerView
+                          ? [<AutoClosedTicketsChart key="autoClosedTickets" />]
+                          : []),
+                  ]
+                : (() => {
+                      switch (selectedChart) {
+                          case "responseTime":
+                              return <ResponseTimeChart />;
+                          case "autoClosedTickets":
+                              return <AutoClosedTicketsChart />;
+                          case "dailyTickets":
+                              return <DailyTicketsChart />;
+                          case "ticketsHandled":
+                              return <TicketsHandledChart />;
+                          case "issueResponse":
+                              return <IssueResponseChart />;
+                          case "optionResponse":
+                              return <OptionResponseChart />;
+                          case "pareto":
+                              return <ParetoChart />;
+                          case "ratings":
+                              return <RatingsChart />;
+                          default:
+                              return null;
+                      }
+                  })();
+
+        return selectedChart === "all" ? (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                {chartsToRender}
+            </div>
+        ) : (
+            <div className="w-full">{chartsToRender}</div>
+        );
     };
 
     /* ----------------------------- UI LAYOUT ----------------------------- */
@@ -684,36 +856,64 @@ export default function Dashboard() {
             <div className="py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     {/* Summary Cards */}
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-8">
                         {[
                             {
                                 label: "Total Tickets",
                                 value: dashboard.closureRate.total_tickets,
                                 textColor: "text-blue-600 dark:text-blue-400",
-                                icon: "📊",
+                                icon: (
+                                    <BarChart3 className="w-7 h-7 text-blue-600 dark:text-blue-400" />
+                                ),
                                 bgIcon: "bg-blue-100 dark:bg-blue-900/30",
                             },
                             {
                                 label: "Resolved",
                                 value: dashboard.closureRate.resolved_tickets,
-                                textColor: "text-green-600 dark:text-green-400",
-                                icon: "✅",
-                                bgIcon: "bg-green-100 dark:bg-green-900/30",
+                                textColor:
+                                    "text-yellow-600 dark:text-yellow-400",
+                                icon: (
+                                    <CheckCircle2 className="w-7 h-7 text-yellow-600 dark:text-yellow-400" />
+                                ),
+                                bgIcon: "bg-yellow-100 dark:bg-yellow-900/30",
                             },
                             {
                                 label: "Unhandled",
                                 value: dashboard.closureRate.unhandled_tickets,
                                 textColor: "text-red-600 dark:text-red-400",
-                                icon: "⏳",
+                                icon: (
+                                    <Clock className="w-7 h-7 text-red-600 dark:text-red-400" />
+                                ),
                                 bgIcon: "bg-red-100 dark:bg-red-900/30",
                             },
+
+                            // Auto Closed (manager only)
+                            ...(isManagerView
+                                ? [
+                                      {
+                                          label: "Auto Closed",
+                                          value:
+                                              dashboard.autoClosedTicketsCount ||
+                                              0,
+                                          textColor:
+                                              "text-green-600 dark:text-green-400",
+                                          icon: (
+                                              <Bot className="w-7 h-7 text-green-600 dark:text-green-400" />
+                                          ),
+                                          bgIcon: "bg-green-100 dark:bg-green-900/30",
+                                      },
+                                  ]
+                                : []),
+
+                            // Closure Rate (last)
                             {
                                 label: "Closure Rate",
                                 value: dashboard.closureRate.closure_rate + "%",
-                                textColor:
-                                    "text-purple-600 dark:text-purple-400",
-                                icon: "📈",
-                                bgIcon: "bg-purple-100 dark:bg-purple-900/30",
+                                textColor: "text-green-600 dark:text-green-400",
+                                icon: (
+                                    <TrendingUp className="w-7 h-7 text-green-600 dark:text-green-400" />
+                                ),
+                                bgIcon: "bg-green-100 dark:bg-green-900/30",
                             },
                         ].map((card, i) => (
                             <div
@@ -727,18 +927,19 @@ export default function Dashboard() {
                                     <div
                                         className={`${card.bgIcon} w-12 h-12 rounded-lg flex items-center justify-center`}
                                     >
-                                        <span className="text-2xl">
-                                            {card.icon}
-                                        </span>
+                                        {card.icon}
                                     </div>
                                 </div>
+
                                 <div
                                     className={`text-3xl font-bold ${card.textColor} mb-1`}
                                 >
                                     {card.value}
                                 </div>
+
                                 {isManagerView &&
-                                    card.label !== "Closure Rate" && (
+                                    card.label !== "Closure Rate" &&
+                                    card.label !== "Auto Closed" && (
                                         <div className="text-xs text-base-content/50 mt-2 font-medium">
                                             Team Total
                                         </div>

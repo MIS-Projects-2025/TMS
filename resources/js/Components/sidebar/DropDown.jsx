@@ -42,8 +42,8 @@ export default function Dropdown({
                 onClick={() => setOpen(!open)}
                 className={`relative flex items-center justify-between w-full px-4 py-2 transition-all duration-150 rounded-md ${
                     parentActive
-                        ? "bg-gray-100 dark:bg-gray-800 font-semibold"
-                        : "hover:bg-gray-200 dark:hover:bg-gray-700"
+                        ? "bg-gray-800 font-semibold"
+                        : "hover:bg-gray-700 "
                 }`}
                 style={{
                     borderLeft: parentActive
@@ -53,14 +53,12 @@ export default function Dropdown({
             >
                 <div className="flex items-center space-x-2">
                     {icon && (
-                        <span className="w-6 h-6 text-gray-700 dark:text-gray-200 flex items-center justify-center">
+                        <span className="w-6 h-6 text-gray-200  flex items-center justify-center">
                             {icon}
                         </span>
                     )}
                     {isSidebarOpen && (
-                        <span className="ml-2 text-gray-700 dark:text-gray-200">
-                            {label}
-                        </span>
+                        <span className="ml-2 text-gray-200 ">{label}</span>
                     )}
                 </div>
 
@@ -72,7 +70,7 @@ export default function Dropdown({
                                 {notification > 99 ? "99+" : notification}
                             </span>
                         )}
-                        <span className="flex items-center justify-center text-gray-700 dark:text-gray-200">
+                        <span className="flex items-center justify-center text-gray-200 ">
                             {open ? (
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
@@ -120,8 +118,8 @@ export default function Dropdown({
                                 href={link.href}
                                 className={`flex items-center justify-between w-full pl-8 pr-3 py-2 rounded transition-all ${
                                     active
-                                        ? "bg-gray-100 dark:bg-gray-800 font-semibold"
-                                        : "hover:bg-gray-200 dark:hover:bg-gray-700"
+                                        ? "bg-gray-800 font-semibold"
+                                        : "hover:bg-gray-700"
                                 }`}
                                 style={{
                                     borderLeft: active
@@ -131,13 +129,13 @@ export default function Dropdown({
                             >
                                 <div className="flex items-center space-x-2">
                                     {link.icon ? (
-                                        <span className="w-5 h-5 text-gray-700 dark:text-gray-200 flex items-center justify-center">
+                                        <span className="w-5 h-5 text-gray-200  flex items-center justify-center">
                                             {link.icon}
                                         </span>
                                     ) : (
                                         <span className="w-4 h-4"></span>
                                     )}
-                                    <span className="text-gray-700 dark:text-gray-200">
+                                    <span className="text-gray-200 ">
                                         {link.label}
                                     </span>
                                 </div>

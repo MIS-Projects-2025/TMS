@@ -45,4 +45,11 @@ class TicketLogs extends Model
     {
         return $this->morphTo('related', 'related_type', 'related_id');
     }
+
+public function ticket()
+{
+    return $this->belongsTo(Ticket::class, 'loggable_id', 'ticket_id')
+        ->where('loggable_type', Ticket::class);
+}
+
 }
