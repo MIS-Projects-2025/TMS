@@ -60,7 +60,17 @@ class AuthMiddleware
             setcookie('sso_token', '', time() - 3600, '/');
             return $this->redirectToLogin($request);
         }
-
+  $canAccess = $currentUser->emp_from == NULL;
+        if (!$canAccess) {
+            session()->forget('emp_data');
+            session()->flush();
+            $redirectUrl = urlencode(route('dashboard'));
+            $authifyUrl = "http://192.168.1.27:8080/authify/public/logout?redirect={$redirectUrl}";
+            return Inertia::render('Unauthorized', [
+                'logoutUrl' => $authifyUrl,
+                'message' => 'Access Restricted: You do not have permission to access this app.',
+            ])->toResponse($request)->setStatusCode(403);
+        }
         // 🔹 5️⃣ Determine system roles
         $systemRoles = [];
         $jobTitle = $currentUser->emp_jobtitle ?? '';

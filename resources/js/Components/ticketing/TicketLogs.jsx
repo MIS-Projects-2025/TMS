@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Timeline, Tag, Spin } from "antd";
+import { Timeline, Tag, Spin, Space } from "antd";
 import {
     FileTextOutlined,
     CheckCircleOutlined,
@@ -7,6 +7,8 @@ import {
     StopOutlined,
     RollbackOutlined,
     HistoryOutlined,
+    SwapOutlined,
+    CalendarOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 
@@ -17,9 +19,7 @@ const TicketLogs = ({ history = [], loading = false }) => {
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const scrollContainerRef = useRef(null);
     const ITEMS_PER_PAGE = 5;
-    console.log(history);
 
-    // Initialize first page
     useEffect(() => {
         if (history.length > 0) {
             const initialItems = history.slice(0, ITEMS_PER_PAGE);
@@ -33,7 +33,6 @@ const TicketLogs = ({ history = [], loading = false }) => {
         }
     }, [history]);
 
-    // Load more items
     const loadMore = () => {
         if (isLoadingMore || !hasMore) return;
         setIsLoadingMore(true);
@@ -55,7 +54,6 @@ const TicketLogs = ({ history = [], loading = false }) => {
         }, 300);
     };
 
-    // Scroll handler
     const handleScroll = (e) => {
         const { scrollTop, scrollHeight, clientHeight } = e.target;
         if (
@@ -74,7 +72,7 @@ const TicketLogs = ({ history = [], loading = false }) => {
             RESOLVE: "green",
             CLOSE: "purple",
             CANCEL: "red",
-            RETURN: "yellow",
+            RETURN: "gold",
             ASSIGN: "cyan",
         };
         return colors[actionType] || "default";
@@ -95,16 +93,16 @@ const TicketLogs = ({ history = [], loading = false }) => {
 
     if (loading) {
         return (
-            <div className="py-20 text-center text-gray-500">
+            <div style={{ padding: "5rem 0", textAlign: "center" }}>
                 <Spin size="large" />
-                <div className="mt-4">Loading history...</div>
+                <div style={{ marginTop: 16 }}>Loading history...</div>
             </div>
         );
     }
 
     if (!history.length) {
         return (
-            <div className="py-4 text-center text-gray-500">
+            <div style={{ padding: "1rem 0", textAlign: "center" }}>
                 No history available.
             </div>
         );
@@ -115,28 +113,27 @@ const TicketLogs = ({ history = [], loading = false }) => {
             ref={scrollContainerRef}
             onScroll={handleScroll}
             style={{
-                maxHeight: "500px",
+                maxHeight: 500,
                 overflowY: "auto",
-                paddingRight: "8px",
+                paddingRight: 8,
+                paddingTop: 8,
             }}
             className="custom-scrollbar"
         >
             <Timeline
-                className="ml-4"
+                className="ml-2 md:ml-4"
                 items={displayedItems.map((item, index) => {
                     const dotColor =
                         item.NEW_STATUS_COLOR ||
                         getActionColor(item.ACTION_TYPE);
 
-                    // Dynamic field changes
-                    // Dynamic field changes
                     const changes = [];
                     if (item.OLD_VALUES && item.NEW_VALUES) {
                         Object.keys(item.NEW_VALUES).forEach((key) => {
+                            if (key === "status") return;
                             let oldVal = item.OLD_VALUES[key] ?? "";
                             let newVal = item.NEW_VALUES[key] ?? "—";
 
-                            // Determine if this field should be treated as a date
                             const isDateField =
                                 key.toLowerCase().endsWith("_at") ||
                                 key.toLowerCase().includes("date");
@@ -146,18 +143,16 @@ const TicketLogs = ({ history = [], loading = false }) => {
                                 const newDate = dayjs(newVal);
                                 if (oldDate.isValid())
                                     oldVal = oldDate.format(
-                                        "MMM DD, YYYY - hh:mm A"
+                                        "MMM DD, YYYY - hh:mm A",
                                     );
                                 if (newDate.isValid())
                                     newVal = newDate.format(
-                                        "MMM DD, YYYY - hh:mm A"
+                                        "MMM DD, YYYY - hh:mm A",
                                     );
                             }
 
-                            // Only push changes if values actually differ
-                            if (oldVal !== newVal) {
+                            if (oldVal !== newVal)
                                 changes.push({ key, oldVal, newVal });
-                            }
                         });
                     }
 
@@ -165,74 +160,306 @@ const TicketLogs = ({ history = [], loading = false }) => {
                         color: dotColor,
                         dot: getActionIcon(item.ACTION_TYPE),
                         children: (
-                            <div className="pb-4" key={index}>
-                                {/* Action Tag & Timestamp */}
-                                <div className="flex items-center gap-2 mt-4">
-                                    <Tag color={dotColor}>
+                            <div key={index} style={{ paddingBottom: 16 }}>
+                                <div
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 12, // space between tag and date
+                                        marginBottom: 12,
+                                    }}
+                                >
+                                    <Tag color="blue" style={{ fontSize: 12 }}>
                                         {item.ACTION_TYPE || "Remark"}
                                     </Tag>
-                                    <span className="text-xs text-base-500">
-                                        {item.ACTION_AT
-                                            ? dayjs(item.ACTION_AT).format(
-                                                  "MMM DD, YYYY - hh:mm A"
-                                              )
-                                            : "—"}
-                                    </span>
+                                    <Space size={4} align="center">
+                                        <CalendarOutlined
+                                            style={{
+                                                fontSize: 12,
+                                                color: "#555",
+                                            }}
+                                        />
+                                        <span
+                                            style={{
+                                                fontSize: 12,
+                                                color: "#555",
+                                            }}
+                                        >
+                                            {item.ACTION_AT
+                                                ? dayjs(item.ACTION_AT).format(
+                                                      "MMM DD, YYYY - hh:mm A",
+                                                  )
+                                                : "—"}
+                                        </span>
+                                    </Space>
                                 </div>
-                                {/* Dynamic Changes */}
-                                {changes.length > 0 && (
-                                    <div className="mt-2 flex flex-col text-sm gap-1">
-                                        {/* Header Row */}
-                                        <div className="grid grid-cols-3 gap-2 font-semibold text-gray-500">
-                                            <span>Field</span>
-                                            <span>Old Value</span>
-                                            <span>New Value</span>
-                                        </div>
-
-                                        {/* Divider */}
-                                        <div className="border-b border-gray-200"></div>
-
-                                        {/* Values */}
-                                        {changes.map((c, i) => (
+                                {/* Status Change */}
+                                {item.OLD_STATUS_LABEL &&
+                                    item.NEW_STATUS_LABEL && (
+                                        <div
+                                            style={{
+                                                marginBottom: 12,
+                                                padding: 12,
+                                                borderRadius: 4,
+                                                border: "1px solid #d9d9d9",
+                                            }}
+                                        >
                                             <div
-                                                key={i}
-                                                className="grid grid-cols-3 gap-2 items-center"
+                                                style={{
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: 8,
+                                                    fontSize: 12,
+                                                    marginBottom: 8,
+                                                }}
                                             >
-                                                {/* Label column */}
-                                                <Tag
-                                                    color="blue"
-                                                    className="truncate"
+                                                <SwapOutlined />
+                                                <span
+                                                    style={{ fontWeight: 500 }}
                                                 >
-                                                    {c.key
-                                                        .replace(/_/g, " ")
-                                                        .toUpperCase()}
-                                                </Tag>
-
-                                                {/* Old Value column */}
-                                                <span className="truncate">
-                                                    {c.oldVal || "—"}
-                                                </span>
-
-                                                {/* New Value column */}
-                                                <span className="truncate">
-                                                    {c.newVal || "—"}
+                                                    Status Change
                                                 </span>
                                             </div>
-                                        ))}
+                                            <div
+                                                style={{
+                                                    display: "flex",
+                                                    gap: 8,
+                                                    flexWrap: "wrap",
+                                                }}
+                                            >
+                                                <Tag
+                                                    color={
+                                                        item.OLD_STATUS_COLOR
+                                                    }
+                                                >
+                                                    {item.OLD_STATUS_LABEL}
+                                                </Tag>
+                                                <span>→</span>
+                                                <Tag
+                                                    color={
+                                                        item.NEW_STATUS_COLOR
+                                                    }
+                                                >
+                                                    {item.NEW_STATUS_LABEL}
+                                                </Tag>
+                                            </div>
+                                        </div>
+                                    )}
+                                {/* Dynamic Field Changes */}
+                                {changes.length > 0 && (
+                                    <div style={{ marginTop: 12 }}>
+                                        <div
+                                            style={{
+                                                fontSize: 12,
+                                                fontWeight: 500,
+                                                marginBottom: 8,
+                                            }}
+                                        >
+                                            Field Changes:
+                                        </div>
+
+                                        <div className="hidden md:block">
+                                            <div
+                                                style={{
+                                                    display: "grid",
+                                                    gridTemplateColumns:
+                                                        "1fr 1fr 1fr",
+                                                    gap: 12,
+                                                    paddingBottom: 8,
+                                                    borderBottom:
+                                                        "1px solid #d9d9d9",
+                                                }}
+                                            >
+                                                <span
+                                                    style={{
+                                                        fontSize: 12,
+                                                        fontWeight: 500,
+                                                    }}
+                                                >
+                                                    Field
+                                                </span>
+                                                <span
+                                                    style={{
+                                                        fontSize: 12,
+                                                        fontWeight: 500,
+                                                    }}
+                                                >
+                                                    Old Value
+                                                </span>
+                                                <span
+                                                    style={{
+                                                        fontSize: 12,
+                                                        fontWeight: 500,
+                                                    }}
+                                                >
+                                                    New Value
+                                                </span>
+                                            </div>
+                                            {changes.map((c, i) => (
+                                                <div
+                                                    key={i}
+                                                    style={{
+                                                        display: "grid",
+                                                        gridTemplateColumns:
+                                                            "1fr 1fr 1fr",
+                                                        gap: 12,
+                                                        padding: "8px 0",
+                                                        borderBottom:
+                                                            "1px solid #f0f0f0",
+                                                    }}
+                                                >
+                                                    <Tag
+                                                        color="blue"
+                                                        style={{ fontSize: 12 }}
+                                                    >
+                                                        {c.key
+                                                            .replace(/_/g, " ")
+                                                            .toUpperCase()}
+                                                    </Tag>
+                                                    <span
+                                                        style={{ fontSize: 12 }}
+                                                    >
+                                                        {c.oldVal || "—"}
+                                                    </span>
+                                                    <span
+                                                        style={{
+                                                            fontSize: 12,
+                                                            fontWeight: 500,
+                                                        }}
+                                                    >
+                                                        {c.newVal || "—"}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <div
+                                            className="md:hidden"
+                                            style={{ marginTop: 12 }}
+                                        >
+                                            {changes.map((c, i) => (
+                                                <div
+                                                    key={i}
+                                                    style={{
+                                                        padding: 12,
+                                                        borderRadius: 4,
+                                                        border: "1px solid #d9d9d9",
+                                                    }}
+                                                >
+                                                    <Tag
+                                                        color="blue"
+                                                        style={{
+                                                            marginBottom: 8,
+                                                            fontSize: 12,
+                                                        }}
+                                                    >
+                                                        {c.key
+                                                            .replace(/_/g, " ")
+                                                            .toUpperCase()}
+                                                    </Tag>
+                                                    <div
+                                                        style={{
+                                                            display: "flex",
+                                                            flexDirection:
+                                                                "column",
+                                                            gap: 4,
+                                                        }}
+                                                    >
+                                                        <div
+                                                            style={{
+                                                                display: "flex",
+                                                                gap: 8,
+                                                            }}
+                                                        >
+                                                            <span
+                                                                style={{
+                                                                    minWidth: 60,
+                                                                    fontSize: 12,
+                                                                }}
+                                                            >
+                                                                Old:
+                                                            </span>
+                                                            <span
+                                                                style={{
+                                                                    fontSize: 12,
+                                                                }}
+                                                            >
+                                                                {c.oldVal ||
+                                                                    "—"}
+                                                            </span>
+                                                        </div>
+                                                        <div
+                                                            style={{
+                                                                display: "flex",
+                                                                gap: 8,
+                                                            }}
+                                                        >
+                                                            <span
+                                                                style={{
+                                                                    minWidth: 60,
+                                                                    fontSize: 12,
+                                                                }}
+                                                            >
+                                                                New:
+                                                            </span>
+                                                            <span
+                                                                style={{
+                                                                    fontSize: 12,
+                                                                    fontWeight: 500,
+                                                                }}
+                                                            >
+                                                                {c.newVal ||
+                                                                    "—"}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
                                 )}
 
-                                {/* Remarks */}
                                 {item.REMARKS && (
-                                    <div className="mt-2 text-sm text-gray-600">
-                                        {item.REMARKS}
+                                    <div
+                                        style={{
+                                            marginBottom: 12,
+                                            padding: 12,
+                                            borderRadius: 4,
+                                            border: "1px solid #d9d9d9",
+                                        }}
+                                    >
+                                        <div
+                                            style={{
+                                                fontSize: 12,
+                                                fontWeight: 500,
+                                                marginBottom: 4,
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 6,
+                                            }}
+                                        >
+                                            <FileTextOutlined />
+                                            <span>Remarks:</span>
+                                        </div>
+                                        <div style={{ fontSize: 14 }}>
+                                            {item.REMARKS}
+                                        </div>
                                     </div>
                                 )}
-
                                 {/* Action By */}
                                 {item.ACTION_BY && (
-                                    <div className="text-xs text-base-500 mt-1">
-                                        By: {item.ACTION_BY}
+                                    <div
+                                        style={{
+                                            fontSize: 12,
+                                            marginTop: 8,
+                                            display: "flex",
+                                            gap: 4,
+                                        }}
+                                    >
+                                        <span style={{ fontWeight: 500 }}>
+                                            By:
+                                        </span>
+                                        <span>{item.ACTION_BY}</span>
                                     </div>
                                 )}
                             </div>
@@ -241,25 +468,31 @@ const TicketLogs = ({ history = [], loading = false }) => {
                 })}
             />
 
-            {/* Loading More */}
             {isLoadingMore && (
-                <div className="text-center py-4">
+                <div style={{ textAlign: "center", padding: 16 }}>
                     <Spin size="small" />
-                    <span className="ml-2 text-sm text-gray-500">
+                    <span style={{ marginLeft: 8, fontSize: 12 }}>
                         Loading more...
                     </span>
                 </div>
             )}
 
-            {/* End of List */}
             {!hasMore && displayedItems.length > 0 && (
-                <div className="text-center py-4 text-xs text-gray-400 border-t border-gray-200">
+                <div
+                    style={{
+                        textAlign: "center",
+                        padding: 16,
+                        fontSize: 12,
+                        borderTop: "1px solid #f0f0f0",
+                    }}
+                >
                     No more history to load
                 </div>
             )}
 
-            {/* Showing count */}
-            <div className="text-center py-2 text-xs text-gray-400">
+            <div
+                style={{ textAlign: "center", padding: "8px 0", fontSize: 12 }}
+            >
                 Showing {displayedItems.length} of {history.length} items
             </div>
         </div>

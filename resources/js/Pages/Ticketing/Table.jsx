@@ -143,7 +143,7 @@ const TicketingTable = () => {
                 title: "Status",
                 dataIndex: "status",
                 key: "status",
-                width: 120,
+                width: 180,
                 sorter: true,
                 render: (_, record) => {
                     const tag = (
@@ -246,7 +246,7 @@ const TicketingTable = () => {
                             filterType="all"
                         />
                         <StatCard
-                            title="Open / Ongoing"
+                            title="Open"
                             value={statusCounts?.open || 0}
                             color="info"
                             icon={PlayCircle}
@@ -255,7 +255,7 @@ const TicketingTable = () => {
                             filterType="open"
                         />
                         <StatCard
-                            title="On Process"
+                            title="On-Going Process"
                             value={statusCounts?.onProcess || 0}
                             color="info"
                             icon={MonitorCog}
@@ -274,7 +274,7 @@ const TicketingTable = () => {
                             tooltip="Tickets open for more than 30 minutes"
                         />
                         <StatCard
-                            title="Resolved"
+                            title="Awaiting Acknowledgement"
                             value={statusCounts?.resolved || 0}
                             color="warning"
                             icon={TicketCheck}
@@ -355,8 +355,12 @@ const TicketingTable = () => {
                                     onRow={(record) => ({
                                         onClick: () =>
                                             handleRowClick(record, openDrawer),
+                                        className:
+                                            "group hover:shadow-md transition-all duration-150",
                                         style: {
                                             cursor: "pointer",
+                                            transition:
+                                                "background-color 0.15s ease, box-shadow 0.15s ease",
                                             ...(supportStaff &&
                                             (record.STATUS === 1 ||
                                                 record.status === 1)

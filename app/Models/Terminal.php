@@ -7,19 +7,17 @@ use Illuminate\Database\Eloquent\Model;
 class Terminal extends Model
 {
     protected $connection = 'inventory';
-    protected $table = 'terminal_table';
+    protected $table = 'promis_terminal';
 
     protected $fillable = [
-        'hostname',
+        'promis_name',
         'ip_address',
         'model',
         'location',
-        'scanner_sn',
-        'scanner_brand',
-        'mouse_brand',
-        'keyboard_brand',
-        'monitor_brand',
-        'category',
+        'scanner',
+        'mouse',
+        'keyboard',
+        'monitor',
         'status',
         'installed_by',
         'remarks',

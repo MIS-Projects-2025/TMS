@@ -45,24 +45,26 @@ class TicketRepository
     {
         return $this->getComputerNamesByType('e learn thin client');
     }
-
-    public function getPrinterNamesByType(string $type): Collection
+    public function getPromisTerminalNames(): Collection
     {
-        return Printer::where('category', strtolower($type))
-            ->where('status', 'active')
-            ->where('printer_name', '!=', 'n/a')
-            ->orderBy('printer_name')
-            ->get(['id', 'printer_name']);
+        return $this->getComputerNamesByType('Promis Terminal');
     }
+  public function getPrinterNamesByType(string $type): Collection
+{
+    return Printer::whereRaw('LOWER(printer_category) = ?', [strtolower($type)])
+        ->where('status', '1')
+        ->orderBy('printer_name')
+        ->get(['id', 'printer_name as name', 'location']);
+}
 
     public function getConsignedPrinterNames(): Collection
     {
         return $this->getPrinterNamesByType('Consigned Printer');
     }
 
-    public function getHoneywellPrinterNames(): Collection
+    public function getBarcodePrinterNames(): Collection
     {
-        return $this->getPrinterNamesByType('Honeywell Printer');
+        return $this->getPrinterNamesByType('Bardcode Printer');
     }
 
     public function getZebraPrinterNames(): Collection
@@ -70,19 +72,16 @@ class TicketRepository
         return $this->getPrinterNamesByType('Zebra Printer');
     }
 
-    public function getTerminalNames(string $type): Collection
-    {
-        return Terminal::select('id', 'hostname as name')
-            ->whereRaw('LOWER(status) = ?', ['active'])
-            ->whereRaw('LOWER(category) = ?', [strtolower($type)])
-            ->orderBy('hostname')
-            ->get();
-    }
+//  public function getTerminalNames(string $type): Collection
+// {
+//     return Terminal::select('id', 'promis_name as name')
+//         ->where('status', '1')
+//         ->orderBy('promis_name')
+//         ->get();
+        
+// }
 
-    public function getPromisTerminalNames(): Collection
-    {
-        return $this->getTerminalNames('Promis Terminal');
-    }
+
 
     public function generateTicketNumber(): string
     {
@@ -242,68 +241,92 @@ class TicketRepository
      * Apply user and role-based filters
      */
     private function applyUserFilters($query, array $filters)
-    {
-        $userId = $filters['userId'] ?? null;
-        $userRoles = $filters['userRoles'] ?? [];
+{
+    $userId = $filters['userId'] ?? null;
+    $userRoles = $filters['userRoles'] ?? [];
 
-        if (!$userId) return;
+    if (!$userId) return;
 
-        // Check if user has full access roles
-        $hasFullAccess = in_array('MIS_SUPERVISOR', $userRoles) ||
-            in_array('SUPPORT_TECHNICIAN', $userRoles) ||
-            in_array('OD', $userRoles);
+    // Check if user has full access roles
+    $hasFullAccess = in_array('MIS_SUPERVISOR', $userRoles) ||
+        in_array('SUPPORT_TECHNICIAN', $userRoles) ||
+        in_array('OD', $userRoles);
 
-        $query->where(function ($q) use ($userId, $userRoles, $hasFullAccess) {
-            $q->where(function ($sub) use ($userId) {
-                $sub->where('status', '!=', 2)
-                    ->orWhere(function ($q2) use ($userId) {
-                        $q2->where('status', 2)
-                            ->where(function ($s) use ($userId) {
+    $isSeniorApprover = in_array('SENIOR_APPROVER', $userRoles);
+
+    $query->where(function ($q) use ($userId, $userRoles, $hasFullAccess, $isSeniorApprover) {
+        $q->where(function ($sub) use ($userId, $isSeniorApprover) {
+            $sub->where('status', '!=', 2)
+                ->orWhere(function ($q2) use ($userId, $isSeniorApprover) {
+                    $q2->where('status', 2)
+                        ->where(function ($s) use ($userId, $isSeniorApprover) {
+                            if ($isSeniorApprover) {
+                                // Senior approvers see status 2 only for non-Support Services
+                                $s->where(function ($sa) use ($userId) {
+                                    $sa->where('type_of_request', '!=', 'Support Services')
+                                        ->orWhere('EMPLOYID', $userId)
+                                        ->orWhereExists(function ($w) use ($userId) {
+                                            $w->select(DB::raw(1))
+                                                ->from('ticket_logs as w1')
+                                                ->whereColumn('w1.loggable_id', 'ticketing_support.ticket_id')
+                                                ->where('w1.action_type', 'ONPROCESS')
+                                                ->where('w1.action_by', $userId)
+                                                ->whereRaw('w1.action_at = (
+                                                    SELECT MAX(w2.action_at)
+                                                    FROM ticket_logs w2
+                                                    WHERE w2.loggable_id = w1.loggable_id
+                                                    AND w2.action_type = "ONPROCESS"
+                                                )');
+                                        });
+                                });
+                                return;
+                            }
+                            // Normal users
+                            $s->where('EMPLOYID', $userId)
+                                ->orWhereExists(function ($w) use ($userId) {
+                                    $w->select(DB::raw(1))
+                                        ->from('ticket_logs as w1')
+                                        ->whereColumn('w1.loggable_id', 'ticketing_support.ticket_id')
+                                        ->where('w1.action_type', 'ONPROCESS')
+                                        ->where('w1.action_by', $userId)
+                                        ->whereRaw('w1.action_at = (
+                                            SELECT MAX(w2.action_at)
+                                            FROM ticket_logs w2
+                                            WHERE w2.loggable_id = w1.loggable_id
+                                            AND w2.action_type = "ONPROCESS"
+                                        )');
+                                });
+                        });
+                });
+        });
+
+        // Only apply ownership filter for non-full-access users
+        if (!$hasFullAccess) {
+            $q->where(function ($ownership) use ($userId) {
+                $ownership->where('EMPLOYID', $userId)
+                    ->orWhere('assigned_to', $userId);
+            });
+        }
+
+        if (in_array('SUPPORT_TECHNICIAN', $userRoles) && !in_array('MIS_SUPERVISOR', $userRoles)) {
+            $q->where(function ($q2) use ($userId, $userRoles) {
+                $q2->where('type_of_request', '!=', 'Support Services')
+                    ->orWhere(function ($sub) use ($userId, $userRoles) {
+                        $sub->where('type_of_request', 'Support Services')
+                            ->where(function ($s) use ($userId, $userRoles) {
                                 $s->where('EMPLOYID', $userId)
-                                    ->orWhereExists(function ($w) use ($userId) {
-                                        $w->select(DB::raw(1))
-                                            ->from('ticket_logs as w1')
-                                            ->whereColumn('w1.loggable_id', 'ticketing_support.ticket_id')
-                                            ->where('w1.action_type', 'ONPROCESS')
-                                            ->where('w1.action_by', $userId)
-                                            ->whereRaw('w1.action_at = (
-                  SELECT MAX(w2.action_at)
-                  FROM ticket_logs w2
-                  WHERE w2.loggable_id = w1.loggable_id
-                  AND w2.action_type = "ONPROCESS"
-              )');
+                                    ->orWhere('assigned_to', $userId)
+                                    ->orWhere(function ($s2) use ($userRoles) {
+                                        if (in_array('SENIOR_APPROVER', $userRoles)) {
+                                            $s2->whereIn('status', [4, 5]);
+                                        }
                                     });
                             });
                     });
             });
-
-            // Only apply ownership filter for non-full-access users
-            if (!$hasFullAccess) {
-                $q->where(function ($ownership) use ($userId) {
-                    $ownership->where('EMPLOYID', $userId)
-                        ->orWhere('assigned_to', $userId);
-                });
-            }
-
-            if (in_array('SUPPORT_TECHNICIAN', $userRoles) && !in_array('MIS_SUPERVISOR', $userRoles)) {
-                $q->where(function ($q2) use ($userId, $userRoles) {
-                    $q2->where('type_of_request', '!=', 'Support Services')
-                        ->orWhere(function ($sub) use ($userId, $userRoles) {
-                            $sub->where('type_of_request', 'Support Services')
-                                ->where(function ($s) use ($userId, $userRoles) {
-                                    $s->where('EMPLOYID', $userId)
-                                        ->orWhere('assigned_to', $userId)
-                                        ->orWhere(function ($s2) use ($userRoles) {
-                                            if (in_array('SENIOR_APPROVER', $userRoles)) {
-                                                $s2->whereIn('status', [4, 5]);
-                                            }
-                                        });
-                                });
-                        });
-                });
-            }
-        });
-    }
+        }
+    });
+}
 
     /**
      * Apply search filter
@@ -393,71 +416,78 @@ class TicketRepository
 
 
     public function getTicketLogs(string $ticketId, int $perPage = 5): LengthAwarePaginator
-    {
-        $logs = TicketLogs::with('actor')
-            ->where('loggable_type', Ticket::class)
-            ->where('loggable_id', $ticketId)
-            ->orderBy('created_at', 'desc')
-            ->paginate($perPage);
+{
+    $logs = TicketLogs::with('actor')
+        ->where('loggable_type', Ticket::class)
+        ->where('loggable_id', $ticketId)
+        ->where('action_type', '!=', 'CREATED')
+        ->orderBy('created_at', 'desc')
+        ->paginate($perPage);
 
-        $userFields = ['employid', 'closed_by', 'assigned_to', 'assigned_by', 'handled_by'];
-        $statusFields = ['status']; // Add any numeric status fields here
+    $userFields = ['employid', 'closed_by', 'assigned_to', 'assigned_by', 'handled_by'];
+    $statusFields = ['status'];
 
-        // Collect EMPLOYIDs from old_values and new_values
-        $empIds = [];
-        foreach ($logs->items() as $log) {
-            $oldValues = $log->old_values ?? [];
-            $newValues = $log->new_values ?? [];
+    // Collect EMPLOYIDs from old_values and new_values
+    $empIds = [];
+    foreach ($logs->items() as $log) {
+        $oldValues = $log->old_values ?? [];
+        $newValues = $log->new_values ?? [];
 
-            foreach ($userFields as $field) {
-                if (!empty($oldValues[$field])) $empIds[] = $oldValues[$field];
-                if (!empty($newValues[$field])) $empIds[] = $newValues[$field];
+        foreach ($userFields as $field) {
+            if (!empty($oldValues[$field])) $empIds[] = $oldValues[$field];
+            if (!empty($newValues[$field])) $empIds[] = $newValues[$field];
+        }
+    }
+
+    $users = User::whereIn('EMPLOYID', array_unique($empIds))
+        ->pluck('EMPNAME', 'EMPLOYID')
+        ->toArray();
+
+    $logs->getCollection()->transform(function ($log) use ($users, $userFields, $statusFields) {
+        $oldValues = $log->old_values ?? [];
+        $newValues = $log->new_values ?? [];
+        $metadata  = $log->metadata ?? [];
+
+        // Store original numeric status values before mapping
+        $oldStatusId = $oldValues['status'] ?? null;
+        $newStatusId = $newValues['status'] ?? null;
+
+        // Map EMPLOYID to names
+        foreach ($userFields as $field) {
+            if (!empty($oldValues[$field]) && isset($users[$oldValues[$field]])) {
+                $oldValues[$field] = $users[$oldValues[$field]];
+            }
+            if (!empty($newValues[$field]) && isset($users[$newValues[$field]])) {
+                $newValues[$field] = $users[$newValues[$field]];
             }
         }
 
-        $users = User::whereIn('EMPLOYID', array_unique($empIds))
-            ->pluck('EMPNAME', 'EMPLOYID')
-            ->toArray();
-
-        $logs->getCollection()->transform(function ($log) use ($users, $userFields, $statusFields) {
-            $oldValues = $log->old_values ?? [];
-            $newValues = $log->new_values ?? [];
-            $metadata  = $log->metadata ?? [];
-
-            // Map EMPLOYID to names
-            foreach ($userFields as $field) {
-                if (!empty($oldValues[$field]) && isset($users[$oldValues[$field]])) {
-                    $oldValues[$field] = $users[$oldValues[$field]];
-                }
-                if (!empty($newValues[$field]) && isset($users[$newValues[$field]])) {
-                    $newValues[$field] = $users[$newValues[$field]];
-                }
+        // Map numeric STATUS to labels
+        foreach ($statusFields as $field) {
+            if (isset($oldValues[$field])) {
+                $oldValues[$field] = TicketStatusService::getStatusLabelById((int) $oldValues[$field]);
             }
-
-            // Map numeric STATUS to labels
-            foreach ($statusFields as $field) {
-                if (isset($oldValues[$field])) {
-                    $oldValues[$field] = TicketStatusService::getStatusLabelById((int) $oldValues[$field]);
-                }
-                if (isset($newValues[$field])) {
-                    $newValues[$field] = TicketStatusService::getStatusLabelById((int) $newValues[$field]);
-                }
+            if (isset($newValues[$field])) {
+                $newValues[$field] = TicketStatusService::getStatusLabelById((int) $newValues[$field]);
             }
+        }
 
-            return [
-                'ID'          => $log->id,
-                'ACTION_TYPE' => $log->action_type,
-                'ACTION_BY'   => $log->actor->empname ?? 'N/A',
-                'ACTION_AT'   => $log->action_at,
-                'OLD_VALUES'  => $oldValues,
-                'NEW_VALUES'  => $newValues,
-                'REMARKS'     => $log->remarks,
-                'METADATA'    => $metadata,
-            ];
-        });
+        return [
+            'ID'               => $log->id,
+            'ACTION_TYPE'      => $log->action_type,
+            'ACTION_BY'        => $log->actor->empname ?? 'N/A',
+            'ACTION_AT'        => $log->action_at,
+            'OLD_VALUES'       => $oldValues,
+            'NEW_VALUES'       => $newValues,
+            'REMARKS'          => $log->remarks,
+            'METADATA'         => $metadata,
+            'OLD_STATUS_ID'    => $oldStatusId,
+            'NEW_STATUS_ID'    => $newStatusId,
+        ];
+    });
 
-        return $logs;
-    }
+    return $logs;
+}
 
 
     /**

@@ -16,7 +16,7 @@ export default function NotificationBell() {
     useEffect(() => {
         console.log(
             "🔊 Loading notification sound from:",
-            "/sounds/notification_sound.mp3"
+            "/sounds/notification_sound.mp3",
         );
 
         // Use the correct path to your sound file
@@ -72,8 +72,9 @@ export default function NotificationBell() {
 
     const fallbackBeep = () => {
         try {
-            const audioContext = new (window.AudioContext ||
-                window.webkitAudioContext)();
+            const audioContext = new (
+                window.AudioContext || window.webkitAudioContext
+            )();
             const oscillator = audioContext.createOscillator();
             const gainNode = audioContext.createGain();
 
@@ -273,7 +274,7 @@ export default function NotificationBell() {
                                         className={`p-4 border-b border-base-300 hover:bg-base-200 transition-all cursor-pointer group relative ${
                                             !notif.read_at
                                                 ? `${getNotificationStyle(
-                                                      type
+                                                      type,
                                                   )} border-l-4`
                                                 : "hover:border-l-4 hover:border-l-base-300"
                                         } ${
@@ -287,7 +288,7 @@ export default function NotificationBell() {
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <span className="text-lg">
                                                         {getNotificationIcon(
-                                                            type
+                                                            type,
                                                         )}
                                                     </span>
                                                     <p className="font-bold text-sm text-primary">
@@ -321,7 +322,7 @@ export default function NotificationBell() {
                                                             "VIEW" && (
                                                             <span className="badge badge-sm badge-warning">
                                                                 {getActionLabel(
-                                                                    actionRequired
+                                                                    actionRequired,
                                                                 )}
                                                             </span>
                                                         )}
@@ -330,7 +331,7 @@ export default function NotificationBell() {
                                                 <p className="text-xs text-base-content/50 mt-2 flex items-center gap-1">
                                                     🕐{" "}
                                                     {formatDate(
-                                                        notif.created_at
+                                                        notif.created_at,
                                                     )}
                                                 </p>
                                             </div>
@@ -341,7 +342,7 @@ export default function NotificationBell() {
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             markAsRead(
-                                                                notif.id
+                                                                notif.id,
                                                             );
                                                         }}
                                                         className="btn btn-ghost btn-xs btn-circle hover:bg-success hover:text-success-content transition-all tooltip tooltip-left"

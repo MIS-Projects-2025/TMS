@@ -70,23 +70,23 @@ class TicketRequestTypeRepository
     /**
      * Get request types with their options for form display
      */
-    public function getRequestTypesForForm($userRoles): array
-    {
-        // If the user has MIS roles, get only MIS request types
-        if (in_array('MIS_SUPERVISOR', $userRoles) || in_array('SUPPORT_TECHNICIAN', $userRoles)) {
-            $grouped = $this->getMisRequestType();
-        } else {
-            $grouped = $this->getAllGrouped();
-        }
-
-        // Transform to the format expected by the frontend
-        $formatted = [];
-        foreach ($grouped as $category => $options) {
-            $formatted[$category] = array_column($options, 'name');
-        }
-
-        return $formatted;
+public function getRequestTypesForForm($userRoles): array
+{
+    // Only Support Technician (not MIS Supervisor)
+    if (in_array('SUPPORT_TECHNICIAN', $userRoles) && !in_array('MIS_SUPERVISOR', $userRoles)) {
+        $grouped = $this->getMisRequestType();
+    } else {
+        $grouped = $this->getAllGrouped();
     }
+
+    // Transform to the format expected by the frontend
+    $formatted = [];
+    foreach ($grouped as $category => $options) {
+        $formatted[$category] = array_column($options, 'name');
+    }
+
+    return $formatted;
+}
 
     /**
      * Create a new request type

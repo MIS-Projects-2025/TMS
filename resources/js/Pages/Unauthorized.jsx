@@ -23,7 +23,7 @@ export default function Unauthorized({ message, logoutUrl }) {
                     <Progress
                         type="circle"
                         percent={percent}
-                        width={120}
+                        size={120}
                         strokeColor="#1890ff"
                         format={() => (
                             <LockOutlined

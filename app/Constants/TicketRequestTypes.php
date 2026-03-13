@@ -32,8 +32,7 @@ class TicketRequestTypes
         ],
         'Printer' => [
             'Consigned Printer',
-            'Honeywell Printer',
-            'Zebra Printer',
+            'Barcode Printer',
         ],
         'Promis' => [
             'Account (Password Reset, Error)',

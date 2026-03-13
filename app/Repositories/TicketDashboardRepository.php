@@ -15,40 +15,44 @@ class TicketDashboardRepository
             ->select('EMPLOYID as emp_id', 'EMPNAME as empname')
             ->first();
     }
-    /**
-     * Response Time – from ticket raised to first handled/resolved
-     */
-    public function getResponseTime($userId = null): array
-    {
-        $query = TicketLogs::where('loggable_type', Ticket::class)
-            ->whereIn('action_type', ['HANDLE', 'RESOLVE'])
-            ->join('ticketing_support as t', 't.ticket_id', '=', 'ticket_logs.loggable_id')
-            ->select(
-                'ticket_logs.action_by',
-                DB::raw('AVG(TIMESTAMPDIFF(MINUTE, t.created_at, ticket_logs.action_at)) AS avg_response_minutes'),
-                DB::raw('MIN(TIMESTAMPDIFF(MINUTE, t.created_at, ticket_logs.action_at)) AS min_response_minutes'),
-                DB::raw('MAX(TIMESTAMPDIFF(MINUTE, t.created_at, ticket_logs.action_at)) AS max_response_minutes')
-            );
+   /**
+ * Response Time – from ticket creation to ONPROCESS
+ */
+public function getResponseTime($userId = null): array
+{
+    $query = TicketLogs::query()
+        ->where('loggable_type', Ticket::class)
+        ->where('action_type', 'ONPROCESS')
+        ->join('ticketing_support as t', 't.ticket_id', '=', 'ticket_logs.loggable_id')
+        ->select(
+            't.handled_by',
+            DB::raw('AVG(TIMESTAMPDIFF(MINUTE, t.created_at, ticket_logs.action_at)) as avg_response_minutes'),
+            DB::raw('MIN(TIMESTAMPDIFF(MINUTE, t.created_at, ticket_logs.action_at)) as min_response_minutes'),
+            DB::raw('MAX(TIMESTAMPDIFF(MINUTE, t.created_at, ticket_logs.action_at)) as max_response_minutes')
+        )
+        ->whereNotNull('t.handled_by');
 
-        if ($userId) {
-            $query->where('ticket_logs.action_by', $userId);
-        }
-
-        return $query->groupBy('ticket_logs.action_by')
-            ->orderBy('avg_response_minutes')
-            ->get()
-            ->map(function ($item) {
-                $user = $this->findUserById($item->action_by);
-                return [
-                    'emp_id' => $user->emp_id ?? $item->action_by,
-                    'emp_name' => $user->empname ?? 'Unknown User',
-                    'avg_response_minutes' => round($item->avg_response_minutes, 2),
-                    'min_response_minutes' => $item->min_response_minutes,
-                    'max_response_minutes' => $item->max_response_minutes,
-                ];
-            })
-            ->toArray();
+    if ($userId) {
+        $query->where('t.handled_by', $userId);
     }
+
+    return $query->groupBy('t.handled_by')
+        ->orderBy('avg_response_minutes')
+        ->get()
+        ->map(function ($item) {
+
+            $user = $this->findUserById($item->handled_by);
+
+            return [
+                'emp_id' => $user->emp_id ?? $item->handled_by,
+                'emp_name' => $user->empname ?? 'Unknown User',
+                'avg_response_minutes' => round($item->avg_response_minutes, 2),
+                'min_response_minutes' => $item->min_response_minutes,
+                'max_response_minutes' => $item->max_response_minutes,
+            ];
+        })
+        ->toArray();
+}
 
     /**
      * Tickets per day

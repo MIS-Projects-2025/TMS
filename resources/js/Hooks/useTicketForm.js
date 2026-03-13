@@ -9,6 +9,7 @@ export const useTicketForm = () => {
         printer_options,
         promis_options,
     } = usePage().props;
+    console.log(usePage().props);
 
     const [selectedType, setSelectedType] = useState("");
     const [selectedOption, setSelectedOption] = useState("");

@@ -7,7 +7,6 @@ const colorMap = {
     neutral: "neural-content",
     secondary: "text-orange-600 border-orange-600",
 };
-
 export default function StatCard({
     title,
     value,
@@ -30,19 +29,26 @@ export default function StatCard({
                 }`}
             onClick={() => onClick(filterType)}
         >
-            {" "}
+            {/* Decorative corners */}
             <div className="absolute top-0 -left-2 w-4 h-4 rounded-full border border-gray-300 dark:border-gray-700"></div>
             <div className="absolute bottom-0 -right-2 w-4 h-4 rounded-full border border-gray-300 dark:border-gray-700"></div>
-            <div className="card-body p-4 flex flex-row items-center justify-between">
-                <div>
-                    <p className={`text-sm font-medium ${colorClass}`}>
-                        {title}
-                    </p>
-                    <p className={`text-2xl font-bold ${colorClass}`}>
-                        {value}
-                    </p>
-                </div>
-                <Icon className={`${colorClass} text-3xl`} />
+
+            {/* Card content */}
+            <div className="card-body p-2 flex flex-col items-center justify-center space-y-2">
+                {/* Icon */}
+                {Icon && (
+                    <div className="flex items-center justify-center text-3xl">
+                        <Icon className={colorClass} />
+                    </div>
+                )}
+
+                {/* Value */}
+                <p className={`text-2xl font-bold ${colorClass}`}>{value}</p>
+
+                {/* Title */}
+                <p className={`text-sm text-center font-medium ${colorClass}`}>
+                    {title}
+                </p>
             </div>
         </div>
     );

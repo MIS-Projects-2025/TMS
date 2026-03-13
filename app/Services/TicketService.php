@@ -47,8 +47,7 @@ class TicketService
             ],
             'printer_options' => [
                 'Consigned Printer' => $this->ticketRepository->getConsignedPrinterNames(),
-                'Honeywell Printer' => $this->ticketRepository->getHoneywellPrinterNames(),
-                'Zebra Printer' => $this->ticketRepository->getZebraPrinterNames(),
+                'Barcode Printer' => $this->ticketRepository->getBarcodePrinterNames(),
             ],
             'promis_options' => [
                 'Promis Terminal' => $this->ticketRepository->getPromisTerminalNames(),
@@ -379,38 +378,34 @@ private function buildRoleBasedConditions(array $employeeData): array
         ];
     }
 
-    public function getTicketLogs(string $ticketId, int $perPage = 5)
-    {
-        $logs = $this->ticketRepository->getTicketLogs($ticketId, $perPage);
+  public function getTicketLogs(string $ticketId, int $perPage = 5)
+{
+    $logs = $this->ticketRepository->getTicketLogs($ticketId, $perPage);
 
-        $logs->getCollection()->transform(function ($log) {
-            $oldStatus = $log['OLD_VALUES']['status'] ?? null;
-            $newStatus = $log['NEW_VALUES']['status'] ?? null;
+    $logs->getCollection()->transform(function ($log) {
+        // Get the already converted labels from OLD_VALUES/NEW_VALUES
+        $oldStatusLabel = $log['OLD_VALUES']['status'] ?? null;
+        $newStatusLabel = $log['NEW_VALUES']['status'] ?? null;
 
-            $log['OLD_STATUS'] = $oldStatus;
-            $log['NEW_STATUS'] = $newStatus;
+        // Get colors using the original numeric IDs
+        $log['OLD_STATUS_LABEL'] = $oldStatusLabel;
+        $log['OLD_STATUS_COLOR'] = $log['OLD_STATUS_ID']
+            ? TicketStatusService::getStatusColorById((int) $log['OLD_STATUS_ID'])
+            : null;
 
-            $log['OLD_STATUS_LABEL'] = $oldStatus
-                ? TicketStatusService::getStatusLabelById((int) $oldStatus)
-                : null;
+        $log['NEW_STATUS_LABEL'] = $newStatusLabel;
+        $log['NEW_STATUS_COLOR'] = $log['NEW_STATUS_ID']
+            ? TicketStatusService::getStatusColorById((int) $log['NEW_STATUS_ID'])
+            : null;
 
-            $log['OLD_STATUS_COLOR'] = $oldStatus
-                ? TicketStatusService::getStatusColorById((int) $oldStatus)
-                : null;
+        // Clean up the temporary ID fields
+        unset($log['OLD_STATUS_ID'], $log['NEW_STATUS_ID']);
 
-            $log['NEW_STATUS_LABEL'] = $newStatus
-                ? TicketStatusService::getStatusLabelById((int) $newStatus)
-                : null;
+        return $log;
+    });
 
-            $log['NEW_STATUS_COLOR'] = $newStatus
-                ? TicketStatusService::getStatusColorById((int) $newStatus)
-                : null;
-
-            return $log;
-        });
-
-        return $logs;
-    }
+    return $logs;
+}
 
 
     public function getAssignedApprovers(string $ticketId)

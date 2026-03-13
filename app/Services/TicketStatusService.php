@@ -11,7 +11,7 @@ class TicketStatusService
         1 => 'Open',
         2 => 'On Process',
         3 => 'Ongoing',
-        4 => 'Resolved',
+        4 => 'Awaiting Acknowledgement',
         5 => 'Closed',
         6 => 'Returned',
         7 => 'Cancelled',

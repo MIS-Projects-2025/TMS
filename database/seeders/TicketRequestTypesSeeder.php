@@ -34,8 +34,7 @@ class TicketRequestTypesSeeder extends Seeder
             ['category' => 'Software', 'name' => 'WhatsApp, Viber', 'has_data' => false],
 
             ['category' => 'Printer', 'name' => 'Consigned Printer', 'has_data' => true],
-            ['category' => 'Printer', 'name' => 'Honeywell Printer', 'has_data' => true],
-            ['category' => 'Printer', 'name' => 'Zebra Printer', 'has_data' => true],
+            ['category' => 'Printer', 'name' => 'Barcode Printer', 'has_data' => true],
 
             ['category' => 'Promis', 'name' => 'Account (Password Reset, Error)', 'has_data' => false],
             ['category' => 'Promis', 'name' => 'Promis Terminal', 'has_data' => true],

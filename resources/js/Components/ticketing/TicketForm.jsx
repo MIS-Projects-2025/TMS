@@ -19,6 +19,26 @@ const TicketForm = ({
     onFinish,
     submitting,
 }) => {
+    const getDisplayValue = (item) => {
+        if (selectedType === "Printer") {
+            return `${item.location || "No Location"} - ${item.printer_name || "No Name"}`;
+        }
+        if (selectedType === "Hardware") {
+            return item.name;
+        }
+        if (selectedType === "Promis") {
+            return item.name;
+        }
+        return item.name;
+    };
+
+    const getOptionValue = (item) => {
+        if (selectedType === "Printer") {
+            return `${item.location || "No Location"} - ${item.printer_name || "No Name"}`;
+        }
+        return item.name;
+    };
+
     return (
         <Form
             form={form}
@@ -121,8 +141,8 @@ const TicketForm = ({
                         size="large"
                     >
                         {itemOptions.map((item) => (
-                            <Option key={item.id} value={item.name}>
-                                {item.name}
+                            <Option key={item.id} value={getOptionValue(item)}>
+                                {getDisplayValue(item)}
                             </Option>
                         ))}
                         <Option key="others" value="Others">
@@ -150,7 +170,11 @@ const TicketForm = ({
                         },
                     ]}
                 >
-                    <Input size="large" placeholder="Enter details..." style={{ borderRadius: 6 }} />
+                    <Input
+                        size="large"
+                        placeholder="Enter details..."
+                        style={{ borderRadius: 6 }}
+                    />
                 </Form.Item>
             )}
 
@@ -177,25 +201,24 @@ const TicketForm = ({
             )}
 
             {/* Submit Button */}
-       {selectedOption && (
-    <Form.Item>
-        <button
-            type="submit"
-            className="btn btn-success w-full"
-            disabled={submitting}
-        >
-            {submitting ? (
-                "Generating..."
-            ) : (
-                <>
-                    <TicketIcon className="inline mr-2" />
-                    Generate Ticket
-                </>
+            {selectedOption && (
+                <Form.Item>
+                    <button
+                        type="submit"
+                        className="btn btn-success w-full"
+                        disabled={submitting}
+                    >
+                        {submitting ? (
+                            "Generating..."
+                        ) : (
+                            <>
+                                <TicketIcon className="inline mr-2" />
+                                Generate Ticket
+                            </>
+                        )}
+                    </button>
+                </Form.Item>
             )}
-        </button>
-    </Form.Item>
-)}
-
         </Form>
     );
 };

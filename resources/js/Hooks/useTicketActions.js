@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { message } from "antd";
+import { message, Modal } from "antd";
 import { router } from "@inertiajs/react";
 import axios from "axios";
+import { ExclamationCircleFilled } from "@ant-design/icons";
 
 export const useTicketActions = ({ supportStaff }) => {
     const [processingTicket, setProcessingTicket] = useState(false);
@@ -9,7 +10,6 @@ export const useTicketActions = ({ supportStaff }) => {
 
     const autoProcessTicket = async (ticketId) => {
         if (!supportStaff) return false;
-        console.log("Auto Process", ticketId);
 
         setProcessingTicket(true);
         try {
@@ -27,9 +27,6 @@ export const useTicketActions = ({ supportStaff }) => {
                     only: ["tickets", "statusCounts", "pagination"],
                     preserveScroll: true,
                     preserveState: true,
-                    onSuccess: () => {
-                        console.log("Table refreshed after auto-process");
-                    },
                 });
 
                 return true;
@@ -49,11 +46,9 @@ export const useTicketActions = ({ supportStaff }) => {
     const fetchAssignedApprovers = async (ticketId) => {
         try {
             const res = await axios.get(
-                route("tickets.assignedApprovers", ticketId)
+                route("tickets.assignedApprovers", ticketId),
             );
-            console.log("Assigned Approvers:", res.data);
 
-            // Store the approvers in state
             if (res.data.success && res.data.data?.approvers) {
                 setAssignedApprovers(res.data.data.approvers);
             } else {
@@ -69,16 +64,56 @@ export const useTicketActions = ({ supportStaff }) => {
     };
 
     const handleRowClick = async (record, openDrawer) => {
-        console.log("Row clicked:", record);
+        try {
+            // If ticket status is 4, fetch assigned approvers
+            if (record.status == 4) {
+                await fetchAssignedApprovers(record.ticket_id);
+            }
 
-        await fetchAssignedApprovers(record.ticket_id);
+            // If user is support staff and ticket is Open (status 1)
+            if (supportStaff && record.status == 1) {
+                Modal.confirm({
+                    title: "Take this ticket?",
+                    content: `Ticket #${record.ticket_id} is currently Open. Do you want to mark it as On-Process and assign it to yourself?`,
+                    okText: "Yes, Process It",
+                    okType: "primary",
+                    cancelText: "Just View",
+                    okButtonProps: {
+                        style: { backgroundColor: "#1677ff" },
+                    },
+                    cancelButtonProps: {
+                        type: "default",
+                    },
+                    onOk: async () => {
+                        try {
+                            const success = await autoProcessTicket(
+                                record.ticket_id,
+                            );
+                            if (success) {
+                                openDrawer(record);
+                            } else {
+                                message.error("Failed to process the ticket.");
+                            }
+                        } catch (err) {
+                            console.error(err);
+                            message.error(
+                                "An error occurred while processing the ticket.",
+                            );
+                        }
+                    },
+                    onCancel: () => {
+                        openDrawer(record);
+                    },
+                });
+                return; // stop further execution after showing modal
+            }
 
-        if (supportStaff && (record.status == 1 || record.status == 3)) {
-            const success = await autoProcessTicket(record.ticket_id);
-            if (!success) return;
+            // Default behavior: just open the drawer
+            openDrawer(record);
+        } catch (error) {
+            console.error("Error handling row click:", error);
+            message.error("Something went wrong while opening the ticket.");
         }
-
-        openDrawer(record);
     };
 
     return {

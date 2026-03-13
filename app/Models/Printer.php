@@ -7,18 +7,20 @@ use Illuminate\Database\Eloquent\Model;
 class Printer extends Model
 {
     protected $connection = 'inventory';
-    protected $table = 'printer_table';
+    protected $table = 'printer';
 
     protected $fillable = [
         'printer_name',
         'ip_address',
         'printer_type',
+        'printer_category',
         'location',
         'brand',
-        'printer_model',
-        'serial_num',
+        'model',
+        'serial_number',
         'dpi',
-        'category',
+        'category_status',
+        'toner',
         'supplier',
         'status',
         'remarks',

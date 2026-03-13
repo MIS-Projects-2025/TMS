@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { usePage, Link } from "@inertiajs/react";
+import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
 
 export default function Dropdown({
     label,
@@ -21,7 +22,6 @@ export default function Dropdown({
 
     const isActiveLink = (href) => url === normalizePath(href);
 
-    // Check if any child is active
     const hasActiveChild = useMemo(
         () => links.some((link) => isActiveLink(link.href)),
         [url, links],
@@ -40,10 +40,10 @@ export default function Dropdown({
             {/* Parent button */}
             <button
                 onClick={() => setOpen(!open)}
-                className={`relative flex items-center justify-between w-full px-4 py-2 transition-all duration-150 rounded-md ${
+                className={`relative flex items-center justify-between w-full px-4 py-2 rounded-md transition-colors duration-200 ${
                     parentActive
                         ? "bg-gray-800 font-semibold"
-                        : "hover:bg-gray-700 "
+                        : "hover:bg-gray-700"
                 }`}
                 style={{
                     borderLeft: parentActive
@@ -51,56 +51,25 @@ export default function Dropdown({
                         : "4px solid transparent",
                 }}
             >
-                <div className="flex items-center space-x-2">
-                    {icon && (
-                        <span className="w-6 h-6 text-gray-200  flex items-center justify-center">
-                            {icon}
-                        </span>
-                    )}
+                <div className="flex items-center space-x-3">
+                    {icon && <span className="text-gray-200">{icon}</span>}
                     {isSidebarOpen && (
-                        <span className="ml-2 text-gray-200 ">{label}</span>
+                        <span className="text-sm text-gray-200">{label}</span>
                     )}
                 </div>
 
-                {/* Arrow & notification */}
                 {isSidebarOpen && (
                     <div className="flex items-center space-x-2">
                         {notification && typeof notification === "number" && (
-                            <span className="bg-red-600 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+                            <span className="bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
                                 {notification > 99 ? "99+" : notification}
                             </span>
                         )}
-                        <span className="flex items-center justify-center text-gray-200 ">
+                        <span className="text-gray-200">
                             {open ? (
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    strokeWidth="1.5"
-                                    stroke="currentColor"
-                                    className="w-6 h-6"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        d="m4.5 15.75 7.5-7.5 7.5 7.5"
-                                    />
-                                </svg>
+                                <ChevronDown className="w-4 h-4" />
                             ) : (
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    strokeWidth="1.5"
-                                    stroke="currentColor"
-                                    className="w-6 h-6"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        d="m19.5 8.25-7.5 7.5-7.5-7.5"
-                                    />
-                                </svg>
+                                <ChevronRight className="w-4 h-4" />
                             )}
                         </span>
                     </div>
@@ -109,39 +78,46 @@ export default function Dropdown({
 
             {/* Child links */}
             {isSidebarOpen && open && (
-                <div className="space-y-1 mt-1">
+                <div className="relative mt-1 space-y-1 pl-4">
+                    {/* vertical line */}
+                    <div className="absolute left-2 top-2 bottom-2 w-[2px] bg-gray-600 rounded" />
+
                     {links.map((link, idx) => {
                         const active = isActiveLink(link.href);
                         return (
                             <Link
                                 key={idx}
                                 href={link.href}
-                                className={`flex items-center justify-between w-full pl-8 pr-3 py-2 rounded transition-all ${
+                                className={`relative flex items-center justify-start w-full pl-6 pr-4 py-2 rounded-md transition-colors duration-200 ${
                                     active
                                         ? "bg-gray-800 font-semibold"
                                         : "hover:bg-gray-700"
                                 }`}
-                                style={{
-                                    borderLeft: active
-                                        ? `4px solid ${activeColor}`
-                                        : "4px solid transparent",
-                                }}
                             >
-                                <div className="flex items-center space-x-2">
-                                    {link.icon ? (
-                                        <span className="w-5 h-5 text-gray-200  flex items-center justify-center">
-                                            {link.icon}
-                                        </span>
-                                    ) : (
-                                        <span className="w-4 h-4"></span>
-                                    )}
-                                    <span className="text-gray-200 ">
-                                        {link.label}
+                                {/* Dot indicator on the vertical line */}
+                                <span
+                                    className="absolute left-[3px] top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full border-2 transition-colors duration-200"
+                                    style={{
+                                        backgroundColor: active
+                                            ? activeColor
+                                            : "#4B5563",
+                                        borderColor: active
+                                            ? activeColor
+                                            : "#6B7280",
+                                    }}
+                                />
+
+                                {link.icon && (
+                                    <span className="mr-2 text-gray-200">
+                                        {link.icon}
                                     </span>
-                                </div>
+                                )}
+                                <span className="text-xs text-gray-200">
+                                    {link.label}
+                                </span>
                                 {link.notification &&
                                     typeof link.notification === "number" && (
-                                        <span className="bg-red-600 text-white text-xs px-1.5 py-0.5 rounded-md">
+                                        <span className="ml-auto bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">
                                             {link.notification > 99
                                                 ? "99+"
                                                 : link.notification}
