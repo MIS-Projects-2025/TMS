@@ -21,7 +21,7 @@ const TicketForm = ({
 }) => {
     const getDisplayValue = (item) => {
         if (selectedType === "Printer") {
-            return `${item.location || "No Location"} - ${item.printer_name || "No Name"}`;
+            return `${item.location || "No Location"} - ${item.name || "No Name"}`;
         }
         if (selectedType === "Hardware") {
             return item.name;
@@ -34,7 +34,7 @@ const TicketForm = ({
 
     const getOptionValue = (item) => {
         if (selectedType === "Printer") {
-            return `${item.location || "No Location"} - ${item.printer_name || "No Name"}`;
+            return `${item.location || "No Location"} - ${item.name || "No Name"}`;
         }
         return item.name;
     };

@@ -26,7 +26,7 @@ Route::post('/MTS/broadcasting/auth', function (Request $request) {
 
         Log::info('Broadcast Auth Session:', ['emp_data' => $empData]);
 
-        $user = $empData ? \App\Models\NotificationUser::firstOrCreate(
+        $user = $empData ? NotificationUser::firstOrCreate(
             ['emp_id' => $empData['emp_id']],
             [
                 'emp_name' => $empData['emp_name'] ?? 'Unknown',

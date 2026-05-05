@@ -12,6 +12,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+         $middleware->encryptCookies(except: [
+            'sso_token',
+        ]);
+          $middleware->validateCsrfTokens(except: [
+        'MTS/broadcasting/auth',
+    ]);
         $middleware->web(append: [
             \App\Http\Middleware\HandleInertiaRequests::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,

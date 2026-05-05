@@ -60,7 +60,7 @@ trait Loggable
 
         TicketLogs::create([
             'loggable_type' => get_class($this),
-            'loggable_id'   => $this->ticket_id ?? $this->id,
+            'loggable_id' => $this->getAttribute('ticket_id') ?? $this->getKey(),
             'action_type'   => $actionType,
             'action_by'     => $empData['emp_id'] ?? $empData['EMPLOYID'] ?? null,
             'action_at'     => now()->format('Y-m-d H:i:s'),

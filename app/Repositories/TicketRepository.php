@@ -81,23 +81,25 @@ class TicketRepository
         
 // }
 
+public function generateTicketNumber(): string
+{
+    $year = date('Y');
+    $prefix = "TKTSPRT-{$year}-";
 
+    $lastTicket = Ticket::where('ticket_id', 'like', "{$prefix}%")
+        ->orderByRaw(
+            'CAST(SUBSTRING(ticket_id, ?) AS UNSIGNED) DESC',
+            [strlen($prefix) + 1]
+        )
+        ->lockForUpdate()
+        ->first();
 
-    public function generateTicketNumber(): string
-    {
-        $year = date('Y');
-        $prefix = "TKTSPRT-{$year}-";
+    $newNumber = $lastTicket
+        ? ((int) substr($lastTicket->ticket_id, strlen($prefix))) + 1
+        : 1;
 
-        $lastTicket = Ticket::where('ticket_id', 'like', "{$prefix}%")
-            ->orderBy('ticket_id', 'desc')
-            ->first();
-
-        $newNumber = $lastTicket
-            ? ((int) substr($lastTicket->ticket_id, -3)) + 1
-            : 1;
-
-        return $prefix . str_pad($newNumber, 3, '0', STR_PAD_LEFT);
-    }
+    return $prefix . str_pad($newNumber, 4, '0', STR_PAD_LEFT);
+}
 
     public function createTicket(array $ticketData): Ticket
     {

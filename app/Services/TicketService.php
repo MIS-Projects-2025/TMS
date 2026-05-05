@@ -55,44 +55,42 @@ class TicketService
         ];
     }
 
-    public function createTicket(array $ticketData, array $employeeData): array
-    {
-        $this->validateTicketData($ticketData);
+   public function createTicket(array $ticketData, array $employeeData): array
+{
+    $this->validateTicketData($ticketData);
 
+    $mainTicketData = [
+        'employid'        => $employeeData['emp_id'],
+        'empname'         => $employeeData['emp_name'],
+        'department'      => $employeeData['emp_dept'],
+        'prodline'        => $employeeData['emp_prodline'],
+        'station'         => $employeeData['emp_station'],
+        'type_of_request' => $ticketData['request_type'],
+        'request_option'  => $ticketData['request_option'],
+        'item_name'       => $ticketData['item_name'] ?? null,
+        'details'         => $ticketData['details'],
+        'status'          => 1,
+        'created_at'      => now(),
+    ];
+
+    return DB::transaction(function () use ($mainTicketData, $ticketData, $employeeData) {
         $ticketId = $this->ticketRepository->generateTicketNumber();
-        $mainTicketData = [
-            'ticket_id' => $ticketId,
-            'employid' => $employeeData['emp_id'],
-            'empname' => $employeeData['emp_name'],
-            'department' => $employeeData['emp_dept'],
-            'prodline' => $employeeData['emp_prodline'],
-            'station' => $employeeData['emp_station'],
-            'type_of_request' => $ticketData['request_type'],
-            'request_option' => $ticketData['request_option'],
-            'item_name' => $ticketData['item_name'] ?? null,
-            'details' => $ticketData['details'],
-            'status' => 1, // Open
-            'created_at' => now(),
-        ];
+         Log::info('Generated ticket ID: ' . $ticketId);
+        $mainTicketData['ticket_id'] = $ticketId;  
 
-        return DB::transaction(function () use ($mainTicketData, $ticketId, $ticketData, $employeeData) {
+        $ticket = $this->ticketRepository->createTicket($mainTicketData);
 
-            $ticket = $this->ticketRepository->createTicket($mainTicketData);
+        $this->notificationService->notifyTicketAction(
+            $ticket,
+            'Created',
+            ['emp_id' => $employeeData['emp_id'], 'name' => $employeeData['emp_name']],
+            $employeeData,
+            ['MIS_SUPERVISOR', 'SUPPORT_TECHNICIAN']
+        );
 
-
-
-            // Notify MIS support
-            $this->notificationService->notifyTicketAction(
-                $ticket,
-                'Created',
-                ['emp_id' => $employeeData['emp_id'], 'name' => $employeeData['emp_name']],
-                $employeeData,
-                ['MIS_SUPERVISOR', 'SUPPORT_TECHNICIAN']
-            );
-
-            return ['ticket' => $ticket, 'ticket_id' => $ticketId];
-        });
-    }
+        return ['ticket' => $ticket, 'ticket_id' => $ticketId];
+    });
+}
 
     public function getTicketsDataTable(array $filters, array $employeeData): array
     {
