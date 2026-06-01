@@ -2,7 +2,7 @@ import { usePage } from "@inertiajs/react";
 import { LayoutDashboard, Tickets, TicketPlus, Settings } from "lucide-react"; // added Settings icon
 import { FileTextOutlined, UserAddOutlined } from "@ant-design/icons"; // optional AntD icon
 import SidebarLink from "@/Components/sidebar/SidebarLink";
-import Dropdown from "@/Components/sidebar/Dropdown";
+import Dropdown from "@/Components/sidebar/DropDown";
 
 export default function NavLinks({ isSidebarOpen }) {
     const { emp_data } = usePage().props;
